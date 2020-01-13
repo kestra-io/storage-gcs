@@ -37,7 +37,7 @@ public class GcsStorage implements StorageInterface {
 
     @Override
     public InputStream get(URI uri) throws FileNotFoundException  {
-        Blob blob = this.client().get(this.blob(uri));
+        Blob blob = this.client().get(this.blob(URI.create(uri.getPath())));
 
         if (blob == null || !blob.exists()) {
             throw new FileNotFoundException(uri.toString() + " (File not found)");
@@ -64,6 +64,8 @@ public class GcsStorage implements StorageInterface {
 
         data.close();
 
-        return new StorageObject(this, uri);
+        URI result = URI.create("kestra://" + uri.getPath());
+
+        return new StorageObject(this, result);
     }
 }
