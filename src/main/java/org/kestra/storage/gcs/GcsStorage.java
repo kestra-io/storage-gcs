@@ -5,6 +5,7 @@ import com.google.cloud.storage.Blob;
 import com.google.cloud.storage.BlobId;
 import com.google.cloud.storage.BlobInfo;
 import com.google.cloud.storage.Storage;
+import io.micronaut.core.annotation.Introspected;
 import org.kestra.core.storages.StorageInterface;
 import org.kestra.core.storages.StorageObject;
 
@@ -20,6 +21,7 @@ import java.nio.channels.ReadableByteChannel;
 
 @Singleton
 @GcsStorageEnabled
+@Introspected
 public class GcsStorage implements StorageInterface {
     @Inject
     GcsClientFactory factory;
