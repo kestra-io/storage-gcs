@@ -34,7 +34,7 @@ public class GcsStorage implements StorageInterface {
     }
 
     private BlobId blob(URI uri) {
-        return BlobId.of(this.config.getBucket(), uri.toString());
+        return BlobId.of(this.config.getBucket(), uri.toString().substring(1));
     }
 
     @Override
