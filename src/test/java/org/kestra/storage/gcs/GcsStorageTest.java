@@ -1,4 +1,4 @@
-package org.kestra.storage.local;
+package org.kestra.storage.gcs;
 
 import com.google.common.io.CharStreams;
 import io.micronaut.test.annotation.MicronautTest;
