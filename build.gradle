@@ -1,8 +1,8 @@
 buildscript {
     ext {
         kestraVersion = "0.1.+"
-        micronautVersion = "1.3.0.M2"
-        lombokVersion = "1.18.10"
+        micronautVersion = "1.3.2"
+        lombokVersion = "1.18.12"
         githubUrl = "kestra-io/" + project.name
     }
 }
@@ -18,6 +18,7 @@ plugins {
 }
 
 repositories {
+    google()
     mavenCentral()
     jcenter()
     maven { url "https://dl.bintray.com/kestra/maven" }
@@ -46,7 +47,8 @@ dependencies {
     compileOnly group: "org.kestra", name: "core", version: kestraVersion
 
     // libs
-    implementation 'com.google.cloud:google-cloud-storage:1.101.0'
+    implementation "androidx.annotation:annotation:1.1.0"
+    implementation "com.google.cloud:google-cloud-storage:1.105.0"
 }
 
 

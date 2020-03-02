@@ -7,10 +7,7 @@ import com.google.cloud.storage.BlobInfo;
 import com.google.cloud.storage.Storage;
 import io.micronaut.core.annotation.Introspected;
 import org.kestra.core.storages.StorageInterface;
-import org.kestra.core.storages.StorageObject;
 
-import javax.inject.Inject;
-import javax.inject.Singleton;
 import java.io.FileNotFoundException;
 import java.io.IOException;
 import java.io.InputStream;
@@ -18,6 +15,8 @@ import java.net.URI;
 import java.nio.ByteBuffer;
 import java.nio.channels.Channels;
 import java.nio.channels.ReadableByteChannel;
+import javax.inject.Inject;
+import javax.inject.Singleton;
 
 @Singleton
 @GcsStorageEnabled
@@ -50,7 +49,7 @@ public class GcsStorage implements StorageInterface {
     }
 
     @Override
-    public StorageObject put(URI uri, InputStream data) throws IOException {
+    public URI put(URI uri, InputStream data) throws IOException {
         BlobInfo blobInfo = BlobInfo
             .newBuilder(this.blob(uri))
             .build();
@@ -66,8 +65,6 @@ public class GcsStorage implements StorageInterface {
 
         data.close();
 
-        URI result = URI.create("kestra://" + uri.getPath());
-
-        return new StorageObject(this, result);
+        return URI.create("kestra://" + uri.getPath());
     }
 }
