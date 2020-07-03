@@ -67,4 +67,8 @@ public class GcsStorage implements StorageInterface {
 
         return URI.create("kestra://" + uri.getPath());
     }
+
+    public boolean delete(URI uri) {
+        return this.client().delete(this.blob(uri));
+    }
 }
