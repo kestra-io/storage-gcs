@@ -49,6 +49,11 @@ public class GcsStorage implements StorageInterface {
     }
 
     @Override
+    public Long size(URI uri) throws IOException {
+        return this.client().get(this.blob(URI.create(uri.getPath()))).getSize();
+    }
+
+    @Override
     public URI put(URI uri, InputStream data) throws IOException {
         BlobInfo blobInfo = BlobInfo
             .newBuilder(this.blob(uri))

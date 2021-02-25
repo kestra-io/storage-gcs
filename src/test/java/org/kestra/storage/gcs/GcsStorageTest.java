@@ -63,6 +63,8 @@ class GcsStorageTest {
             is(CharStreams.toString(new InputStreamReader(new FileInputStream(Objects.requireNonNull(resource).getFile()))))
         );
 
+        assertThat(storageInterface.size(new URI("/file/storage/put.yml")), is(76L));
+
         boolean delete = storageInterface.delete(put);
         assertThat(delete, is(true));
 
