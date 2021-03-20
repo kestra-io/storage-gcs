@@ -1,4 +1,4 @@
-package org.kestra.storage.gcs;
+package io.kestra.storage.gcs;
 
 import com.google.cloud.WriteChannel;
 import com.google.cloud.storage.Blob;
@@ -6,7 +6,7 @@ import com.google.cloud.storage.BlobId;
 import com.google.cloud.storage.BlobInfo;
 import com.google.cloud.storage.Storage;
 import io.micronaut.core.annotation.Introspected;
-import org.kestra.core.storages.StorageInterface;
+import io.kestra.core.storages.StorageInterface;
 
 import java.io.FileNotFoundException;
 import java.io.IOException;

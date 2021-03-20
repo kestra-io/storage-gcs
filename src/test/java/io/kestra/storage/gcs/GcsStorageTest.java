@@ -1,9 +1,9 @@
-package org.kestra.storage.gcs;
+package io.kestra.storage.gcs;
 
 import com.google.common.io.CharStreams;
 import io.micronaut.test.extensions.junit5.annotation.MicronautTest;
 import org.junit.jupiter.api.Test;
-import org.kestra.core.storages.StorageInterface;
+import io.kestra.core.storages.StorageInterface;
 
 import java.io.FileInputStream;
 import java.io.FileNotFoundException;

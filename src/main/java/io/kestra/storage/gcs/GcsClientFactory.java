@@ -1,4 +1,4 @@
-package org.kestra.storage.gcs;
+package io.kestra.storage.gcs;
 
 import com.google.cloud.storage.Storage;
 import com.google.cloud.storage.StorageOptions;

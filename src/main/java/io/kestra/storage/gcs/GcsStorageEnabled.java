@@ -1,4 +1,4 @@
-package org.kestra.storage.gcs;
+package io.kestra.storage.gcs;
 
 import io.micronaut.context.annotation.Requires;
 
