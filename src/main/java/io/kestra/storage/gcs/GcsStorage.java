@@ -44,7 +44,7 @@ public class GcsStorage implements StorageInterface {
         Blob blob = this.client().get(this.blob(URI.create(uri.getPath())));
 
         if (blob == null || !blob.exists()) {
-            throw new FileNotFoundException(uri.toString() + " (File not found)");
+            throw new FileNotFoundException(uri + " (File not found)");
         }
 
         ReadableByteChannel reader = blob.reader();
@@ -52,8 +52,14 @@ public class GcsStorage implements StorageInterface {
     }
 
     @Override
-    public Long size(URI uri) throws IOException {
-        return this.client().get(this.blob(URI.create(uri.getPath()))).getSize();
+    public Long size(URI uri) throws FileNotFoundException {
+        Blob blob = this.client().get(this.blob(URI.create(uri.getPath())));
+
+        if (blob == null || !blob.exists()) {
+            throw new FileNotFoundException(uri + " (File not found)");
+        }
+
+        return blob.getSize();
     }
 
     @Override
