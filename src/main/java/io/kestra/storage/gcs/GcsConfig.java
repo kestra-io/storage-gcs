@@ -10,4 +10,8 @@ import javax.inject.Singleton;
 @ConfigurationProperties("kestra.storage.gcs")
 public class GcsConfig {
     String bucket;
+
+    String serviceAccount;
+
+    String projectId;
 }
