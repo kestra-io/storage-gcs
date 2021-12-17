@@ -8,7 +8,7 @@ import io.micronaut.context.annotation.Factory;
 import lombok.SneakyThrows;
 
 import java.io.ByteArrayInputStream;
-import javax.inject.Singleton;
+import jakarta.inject.Singleton;
 
 @Factory
 @GcsStorageEnabled
