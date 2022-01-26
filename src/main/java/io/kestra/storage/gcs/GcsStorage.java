@@ -40,79 +40,100 @@ public class GcsStorage implements StorageInterface {
     }
 
     @Override
-    public InputStream get(URI uri) throws FileNotFoundException  {
-        Blob blob = this.client().get(this.blob(URI.create(uri.getPath())));
+    public InputStream get(URI uri) throws IOException {
+        try {
+            Blob blob = this.client().get(this.blob(URI.create(uri.getPath())));
 
-        if (blob == null || !blob.exists()) {
-            throw new FileNotFoundException(uri + " (File not found)");
+            if (blob == null || !blob.exists()) {
+                throw new FileNotFoundException(uri + " (File not found)");
+            }
+
+            ReadableByteChannel reader = blob.reader();
+            return Channels.newInputStream(reader);
+        } catch (StorageException e) {
+            throw new IOException(e);
         }
-
-        ReadableByteChannel reader = blob.reader();
-        return Channels.newInputStream(reader);
     }
 
     @Override
-    public Long size(URI uri) throws FileNotFoundException {
-        Blob blob = this.client().get(this.blob(URI.create(uri.getPath())));
+    public Long size(URI uri) throws IOException {
+        try {
+            Blob blob = this.client().get(this.blob(URI.create(uri.getPath())));
 
-        if (blob == null || !blob.exists()) {
-            throw new FileNotFoundException(uri + " (File not found)");
+            if (blob == null || !blob.exists()) {
+                throw new FileNotFoundException(uri + " (File not found)");
+            }
+
+            return blob.getSize();
+        } catch (StorageException e) {
+            throw new IOException(e);
         }
-
-        return blob.getSize();
     }
 
     @Override
     public URI put(URI uri, InputStream data) throws IOException {
-        BlobInfo blobInfo = BlobInfo
-            .newBuilder(this.blob(uri))
-            .build();
+        try {
+            BlobInfo blobInfo = BlobInfo
+                .newBuilder(this.blob(uri))
+                .build();
 
-        try (WriteChannel writer = this.client().writer(blobInfo)) {
-            byte[] buffer = new byte[10_240];
+            try (WriteChannel writer = this.client().writer(blobInfo)) {
+                byte[] buffer = new byte[10_240];
 
-            int limit;
-            while ((limit = data.read(buffer)) >= 0) {
-                writer.write(ByteBuffer.wrap(buffer, 0, limit));
+                int limit;
+                while ((limit = data.read(buffer)) >= 0) {
+                    writer.write(ByteBuffer.wrap(buffer, 0, limit));
+                }
             }
+
+            data.close();
+
+            return URI.create("kestra://" + uri.getPath());
+        } catch (StorageException e) {
+            throw new IOException(e);
         }
-
-        data.close();
-
-        return URI.create("kestra://" + uri.getPath());
     }
 
-    public boolean delete(URI uri) {
-        return this.client().delete(this.blob(uri));
+    public boolean delete(URI uri) throws IOException {
+        try {
+            return this.client().delete(this.blob(uri));
+        } catch (StorageException e) {
+            throw new IOException(e);
+        }
     }
 
     @Override
     public List<URI> deleteByPrefix(URI storagePrefix) throws IOException {
-        StorageBatch batch = this.client().batch();
-        Map<URI, StorageBatchResult<Boolean>> results = new HashMap<>();
+        try {
 
-        Page<Blob> blobs = this.client()
-            .list(this.config.getBucket(),
-                Storage.BlobListOption.prefix(storagePrefix.getPath().substring(1))
-            );
+            StorageBatch batch = this.client().batch();
+            Map<URI, StorageBatchResult<Boolean>> results = new HashMap<>();
 
-        for (Blob blob : blobs.iterateAll()) {
-            results.put(URI.create("kestra:///" + blob.getBlobId().getName()), batch.delete(blob.getBlobId()));
+            Page<Blob> blobs = this.client()
+                .list(this.config.getBucket(),
+                    Storage.BlobListOption.prefix(storagePrefix.getPath().substring(1))
+                );
+
+            for (Blob blob : blobs.iterateAll()) {
+                results.put(URI.create("kestra:///" + blob.getBlobId().getName()), batch.delete(blob.getBlobId()));
+            }
+
+            batch.submit();
+
+            if (!results.entrySet().stream().allMatch(r -> r.getValue() != null && r.getValue().get())) {
+                throw new IOException("Unable to delete all files, failed on [" +
+                    results
+                        .entrySet()
+                        .stream()
+                        .filter(r -> r.getValue() == null || !r.getValue().get())
+                        .map(r -> r.getKey().getPath())
+                        .collect(Collectors.joining(", ")) +
+                    "]");
+            }
+
+            return new ArrayList<>(results.keySet());
+        } catch (StorageException e) {
+            throw new IOException(e);
         }
-
-        batch.submit();
-
-        if (!results.entrySet().stream().allMatch(r -> r.getValue() != null && r.getValue().get())) {
-            throw new IOException("Unable to delete all files, failed on [" +
-                results
-                    .entrySet()
-                    .stream()
-                    .filter(r -> r.getValue() == null || !r.getValue().get())
-                    .map(r -> r.getKey().getPath())
-                    .collect(Collectors.joining(", ")) +
-                "]");
-        }
-
-        return new ArrayList<>(results.keySet());
     }
 }
