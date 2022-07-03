@@ -120,4 +120,12 @@ class GcsStorageTest {
                 });
             });
     }
+
+    @Test
+    void deleteByPrefixNoResult() throws Exception {
+        String prefix = IdUtils.create();
+
+        List<URI> deleted = storageInterface.deleteByPrefix(new URI("/" + prefix + "/storage/"));
+        assertThat(deleted.size(), is(0));
+    }
 }

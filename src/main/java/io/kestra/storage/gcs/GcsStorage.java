@@ -105,7 +105,6 @@ public class GcsStorage implements StorageInterface {
     @Override
     public List<URI> deleteByPrefix(URI storagePrefix) throws IOException {
         try {
-
             StorageBatch batch = this.client().batch();
             Map<URI, StorageBatchResult<Boolean>> results = new HashMap<>();
 
@@ -116,6 +115,10 @@ public class GcsStorage implements StorageInterface {
 
             for (Blob blob : blobs.iterateAll()) {
                 results.put(URI.create("kestra:///" + blob.getBlobId().getName()), batch.delete(blob.getBlobId()));
+            }
+
+            if (results.size() == 0) {
+                return List.of();
             }
 
             batch.submit();
