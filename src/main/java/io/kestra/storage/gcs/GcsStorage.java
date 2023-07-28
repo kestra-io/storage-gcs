@@ -13,6 +13,8 @@ import java.net.URI;
 import java.nio.ByteBuffer;
 import java.nio.channels.Channels;
 import java.nio.channels.ReadableByteChannel;
+import java.nio.file.Files;
+import java.nio.file.attribute.FileTime;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -56,6 +58,16 @@ public class GcsStorage implements StorageInterface {
     }
 
     @Override
+    public boolean exists(URI uri) {
+        try {
+            Blob blob = this.client().get(this.blob(URI.create(uri.getPath())));
+            return blob != null && blob.exists();
+        } catch (StorageException e) {
+            return false;
+        }
+    }
+
+    @Override
     public Long size(URI uri) throws IOException {
         try {
             Blob blob = this.client().get(this.blob(URI.create(uri.getPath())));
@@ -65,6 +77,21 @@ public class GcsStorage implements StorageInterface {
             }
 
             return blob.getSize();
+        } catch (StorageException e) {
+            throw new IOException(e);
+        }
+    }
+
+    @Override
+    public Long lastModifiedTime(URI uri) throws IOException {
+        try {
+            Blob blob = this.client().get(this.blob(URI.create(uri.getPath())));
+
+            if (blob == null || !blob.exists()) {
+                throw new FileNotFoundException(uri + " (File not found)");
+            }
+
+            return blob.getUpdateTimeOffsetDateTime().toInstant().toEpochMilli();
         } catch (StorageException e) {
             throw new IOException(e);
         }
