@@ -132,6 +132,11 @@ pom {
 shadowJar {
     archiveClassifier.set(null)
     mergeServiceFiles()
+    dependencies {
+        exclude(dependency {
+            it.moduleGroup.startsWith("com.fasterxml.jackson")
+        })
+    }
 }
 
 github {
