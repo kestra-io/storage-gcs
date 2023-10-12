@@ -38,7 +38,13 @@ public class GcsStorage implements StorageInterface {
     }
 
     private BlobId blob(String tenantId, URI uri) {
-        return BlobId.of(this.config.getBucket(), tenantId + uri.getPath());
+        String path;
+        if (tenantId != null) {
+            path = tenantId + uri.getPath();
+        } else {
+            path = uri.getPath().substring(1);
+        }
+        return BlobId.of(this.config.getBucket(), path);
     }
 
     @Override
@@ -135,9 +141,16 @@ public class GcsStorage implements StorageInterface {
             StorageBatch batch = this.client().batch();
             Map<URI, StorageBatchResult<Boolean>> results = new HashMap<>();
 
+            String prefix;
+            if (tenantId != null) {
+                prefix = tenantId + storagePrefix.getPath();
+            } else {
+                prefix = storagePrefix.getPath().substring(1);
+            }
+
             Page<Blob> blobs = this.client()
                 .list(this.config.getBucket(),
-                    Storage.BlobListOption.prefix(tenantId + storagePrefix.getPath())
+                    Storage.BlobListOption.prefix(prefix)
                 );
 
             for (Blob blob : blobs.iterateAll()) {
