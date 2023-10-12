@@ -120,7 +120,7 @@ class GcsStorageTest {
     }
 
     @Test
-    void deleteByPrefix_NoTenant() throws Exception {
+    void deleteByPrefixNoTenant() throws Exception {
         String prefix = IdUtils.create();
         String tenantId = IdUtils.create();
 
