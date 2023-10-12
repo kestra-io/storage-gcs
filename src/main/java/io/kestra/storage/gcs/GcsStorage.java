@@ -37,14 +37,14 @@ public class GcsStorage implements StorageInterface {
         return factory.of(config);
     }
 
-    private BlobId blob(URI uri) {
-        return BlobId.of(this.config.getBucket(), uri.getPath().substring(1));
+    private BlobId blob(String tenantId, URI uri) {
+        return BlobId.of(this.config.getBucket(), tenantId + uri.getPath());
     }
 
     @Override
-    public InputStream get(URI uri) throws IOException {
+    public InputStream get(String tenantId, URI uri) throws IOException {
         try {
-            Blob blob = this.client().get(this.blob(URI.create(uri.getPath())));
+            Blob blob = this.client().get(this.blob(tenantId, URI.create(uri.getPath())));
 
             if (blob == null || !blob.exists()) {
                 throw new FileNotFoundException(uri + " (File not found)");
@@ -58,9 +58,9 @@ public class GcsStorage implements StorageInterface {
     }
 
     @Override
-    public boolean exists(URI uri) {
+    public boolean exists(String tenantId, URI uri) {
         try {
-            Blob blob = this.client().get(this.blob(URI.create(uri.getPath())));
+            Blob blob = this.client().get(this.blob(tenantId, URI.create(uri.getPath())));
             return blob != null && blob.exists();
         } catch (StorageException e) {
             return false;
@@ -68,9 +68,9 @@ public class GcsStorage implements StorageInterface {
     }
 
     @Override
-    public Long size(URI uri) throws IOException {
+    public Long size(String tenantId,URI uri) throws IOException {
         try {
-            Blob blob = this.client().get(this.blob(URI.create(uri.getPath())));
+            Blob blob = this.client().get(this.blob(tenantId, URI.create(uri.getPath())));
 
             if (blob == null || !blob.exists()) {
                 throw new FileNotFoundException(uri + " (File not found)");
@@ -83,9 +83,9 @@ public class GcsStorage implements StorageInterface {
     }
 
     @Override
-    public Long lastModifiedTime(URI uri) throws IOException {
+    public Long lastModifiedTime(String tenantId,URI uri) throws IOException {
         try {
-            Blob blob = this.client().get(this.blob(URI.create(uri.getPath())));
+            Blob blob = this.client().get(this.blob(tenantId, URI.create(uri.getPath())));
 
             if (blob == null || !blob.exists()) {
                 throw new FileNotFoundException(uri + " (File not found)");
@@ -98,10 +98,10 @@ public class GcsStorage implements StorageInterface {
     }
 
     @Override
-    public URI put(URI uri, InputStream data) throws IOException {
+    public URI put(String tenantId, URI uri, InputStream data) throws IOException {
         try {
             BlobInfo blobInfo = BlobInfo
-                .newBuilder(this.blob(uri))
+                .newBuilder(this.blob(tenantId, uri))
                 .build();
 
             try (WriteChannel writer = this.client().writer(blobInfo)) {
@@ -121,27 +121,27 @@ public class GcsStorage implements StorageInterface {
         }
     }
 
-    public boolean delete(URI uri) throws IOException {
+    public boolean delete(String tenantId, URI uri) throws IOException {
         try {
-            return this.client().delete(this.blob(uri));
+            return this.client().delete(this.blob(tenantId, uri));
         } catch (StorageException e) {
             throw new IOException(e);
         }
     }
 
     @Override
-    public List<URI> deleteByPrefix(URI storagePrefix) throws IOException {
+    public List<URI> deleteByPrefix(String tenantId, URI storagePrefix) throws IOException {
         try {
             StorageBatch batch = this.client().batch();
             Map<URI, StorageBatchResult<Boolean>> results = new HashMap<>();
 
             Page<Blob> blobs = this.client()
                 .list(this.config.getBucket(),
-                    Storage.BlobListOption.prefix(storagePrefix.getPath().substring(1))
+                    Storage.BlobListOption.prefix(tenantId + storagePrefix.getPath())
                 );
 
             for (Blob blob : blobs.iterateAll()) {
-                results.put(URI.create("kestra:///" + blob.getBlobId().getName()), batch.delete(blob.getBlobId()));
+                results.put(URI.create("kestra:///" + blob.getBlobId().getName().replace(tenantId + "/", "")), batch.delete(blob.getBlobId()));
             }
 
             if (results.size() == 0) {
