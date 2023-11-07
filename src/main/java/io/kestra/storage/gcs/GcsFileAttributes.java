@@ -5,6 +5,10 @@ import io.kestra.core.storages.FileAttributes;
 import lombok.Builder;
 import lombok.Value;
 
+import java.time.Instant;
+import java.time.OffsetDateTime;
+import java.util.Optional;
+
 @Value
 @Builder
 public class GcsFileAttributes implements FileAttributes {
@@ -15,12 +19,18 @@ public class GcsFileAttributes implements FileAttributes {
 
     @Override
     public long getLastModifiedTime() {
-        return blobInfo.getUpdateTimeOffsetDateTime().toInstant().toEpochMilli();
+        return Optional.ofNullable(blobInfo.getUpdateTimeOffsetDateTime())
+            .map(OffsetDateTime::toInstant)
+            .map(Instant::toEpochMilli)
+            .orElse(0L);
     }
 
     @Override
     public long getCreationTime() {
-        return blobInfo.getCreateTimeOffsetDateTime().toInstant().toEpochMilli();
+        return Optional.ofNullable(blobInfo.getCreateTimeOffsetDateTime())
+            .map(OffsetDateTime::toInstant)
+            .map(Instant::toEpochMilli)
+            .orElse(0L);
     }
 
     @Override

@@ -4,6 +4,7 @@ import com.google.common.io.CharStreams;
 import io.kestra.core.storages.FileAttributes;
 import io.kestra.core.utils.IdUtils;
 import io.micronaut.test.extensions.junit5.annotation.MicronautTest;
+import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 import io.kestra.core.storages.StorageInterface;
 
@@ -204,6 +205,14 @@ class GcsStorageTest {
         List<FileAttributes> list = storageInterface.list(tenantId, new URI("/" + prefix + "/storage"));
 
         assertThat(list.stream().map(FileAttributes::getFileName).toList(), containsInAnyOrder("root.yml", "level1", "another"));
+
+        // Assert that null modification & creation date don't break getters (and so the serialization) since they can be null for directory
+        Assertions.assertDoesNotThrow(() -> {
+            list.forEach(fileAttr -> {
+                fileAttr.getLastModifiedTime();
+                fileAttr.getCreationTime();
+            });
+        });
         // Assert that '..' in path cannot be used as gcs do not use directory listing and traversal.
         assertThrows(FileNotFoundException.class, () -> {storageInterface.get(tenantId, new URI("/" + prefix + "/storage/level2/..")); });
 
