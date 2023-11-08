@@ -50,13 +50,27 @@ public class GcsStorage implements StorageInterface {
 
     @NotNull
     private String getPath(String tenantId, URI uri) {
-        String path;
-        if (tenantId != null) {
-            path = tenantId + uri.getPath();
-        } else {
-            path = uri.getPath().substring(1);
+        if (uri == null) {
+            uri = URI.create("/");
         }
-        return path;
+
+        parentTraversalGuard(uri);
+        String path = uri.getPath();
+        if (!path.startsWith("/")) {
+            path = "/" + path;
+        }
+
+        if (tenantId == null) {
+            return path;
+        }
+        return "/" + tenantId + path;
+    }
+
+    // Traversal does not work with gcs but it just return empty objects so throwing is more explicit
+    private void parentTraversalGuard(URI uri) {
+        if (uri.toString().contains("..")) {
+            throw new IllegalArgumentException("File should be accessed with their full path and not using relative '..' path.");
+        }
     }
 
     @Override
@@ -81,7 +95,7 @@ public class GcsStorage implements StorageInterface {
         String prefix = (path.endsWith("/")) ? path : path + "/";
         Page<Blob> blobs = this.client().list(config.bucket, Storage.BlobListOption.prefix(prefix),
             Storage.BlobListOption.currentDirectory());
-        return blobs.streamAll()
+        List<FileAttributes> list = blobs.streamAll()
             .filter(blob -> {
                 String key = blob.getName().substring(prefix.length());
                 // Remove recursive result and requested dir
@@ -89,6 +103,11 @@ public class GcsStorage implements StorageInterface {
             })
             .map(throwFunction(this::getGcsFileAttributes))
             .toList();
+        if(list.isEmpty()) {
+            // this will throw FileNotFound if there is no directory
+            this.getAttributes(tenantId, uri);
+        }
+        return list;
     }
 
     @Override
@@ -182,13 +201,17 @@ public class GcsStorage implements StorageInterface {
     }
 
     private void mkdirs(String path) {
-        if (!path.endsWith("/") && path.lastIndexOf('/') > 0) {
-            path = path.substring(0, path.lastIndexOf('/') + 1);
+        path = path.replaceAll("^/*", "");
+        String[] directories = path.split("/");
+        StringBuilder aggregatedPath = new StringBuilder("/");
+        // perform 1 put request per parent directory in the path
+        for (int i = 0; i <= directories.length - (path.endsWith("/") ? 1 : 2); i++) {
+            aggregatedPath.append(directories[i]).append("/");
+            BlobInfo blobInfo = BlobInfo
+                .newBuilder(this.blob(aggregatedPath.toString()))
+                .build();
+            this.client().create(blobInfo);
         }
-        BlobInfo blobInfo = BlobInfo
-            .newBuilder(this.blob(path))
-            .build();
-        this.client().create(blobInfo);
     }
 
     public boolean delete(String tenantId, URI uri) throws IOException {
@@ -196,7 +219,7 @@ public class GcsStorage implements StorageInterface {
     }
 
     @Override
-    public URI createDirectory(String tenantId, URI uri) throws IOException {
+    public URI createDirectory(String tenantId, URI uri) {
         String path = getPath(tenantId, uri);
         if (!path.endsWith("/")) {
             path = path + "/";
@@ -248,10 +271,10 @@ public class GcsStorage implements StorageInterface {
                 );
 
             for (Blob blob : blobs.iterateAll()) {
-                results.put(URI.create("kestra:///" + blob.getBlobId().getName().replace(tenantId + "/", "")), batch.delete(blob.getBlobId()));
+                results.put(URI.create("kestra://" + blob.getBlobId().getName().replace(tenantId + "/", "").replaceAll("/$", "")), batch.delete(blob.getBlobId()));
             }
 
-            if (results.size() == 0) {
+            if (results.isEmpty()) {
                 return List.of();
             }
 
