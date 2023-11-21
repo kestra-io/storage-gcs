@@ -29,14 +29,11 @@ import static io.kestra.core.utils.Rethrow.throwFunction;
 @Introspected
 public class GcsStorage implements StorageInterface {
     @Inject
-    GcsClientFactory factory;
+    Storage storage;
 
     @Inject
     GcsConfig config;
 
-    private Storage client() {
-        return factory.of(config);
-    }
 
     private BlobId blob(String tenantId, URI uri) {
         String path = getPath(tenantId, uri);
@@ -76,7 +73,7 @@ public class GcsStorage implements StorageInterface {
     @Override
     public InputStream get(String tenantId, URI uri) throws IOException {
         try {
-            Blob blob = this.client().get(this.blob(tenantId, URI.create(uri.getPath())));
+            Blob blob = this.storage.get(this.blob(tenantId, URI.create(uri.getPath())));
 
             if (blob == null || !blob.exists()) {
                 throw new FileNotFoundException(uri + " (File not found)");
@@ -93,7 +90,7 @@ public class GcsStorage implements StorageInterface {
     public List<FileAttributes> list(String tenantId, URI uri) throws IOException {
         String path = getPath(tenantId, uri);
         String prefix = (path.endsWith("/")) ? path : path + "/";
-        Page<Blob> blobs = this.client().list(config.bucket, Storage.BlobListOption.prefix(prefix),
+        Page<Blob> blobs = this.storage.list(config.bucket, Storage.BlobListOption.prefix(prefix),
             Storage.BlobListOption.currentDirectory());
         List<FileAttributes> list = blobs.streamAll()
             .filter(blob -> {
@@ -113,7 +110,7 @@ public class GcsStorage implements StorageInterface {
     @Override
     public boolean exists(String tenantId, URI uri) {
         try {
-            Blob blob = this.client().get(this.blob(tenantId, URI.create(uri.getPath())));
+            Blob blob = this.storage.get(this.blob(tenantId, URI.create(uri.getPath())));
             return blob != null && blob.exists();
         } catch (StorageException e) {
             return false;
@@ -123,7 +120,7 @@ public class GcsStorage implements StorageInterface {
     @Override
     public Long size(String tenantId,URI uri) throws IOException {
         try {
-            Blob blob = this.client().get(this.blob(tenantId, URI.create(uri.getPath())));
+            Blob blob = this.storage.get(this.blob(tenantId, URI.create(uri.getPath())));
 
             if (blob == null || !blob.exists()) {
                 throw new FileNotFoundException(uri + " (File not found)");
@@ -138,7 +135,7 @@ public class GcsStorage implements StorageInterface {
     @Override
     public Long lastModifiedTime(String tenantId,URI uri) throws IOException {
         try {
-            Blob blob = this.client().get(this.blob(tenantId, URI.create(uri.getPath())));
+            Blob blob = this.storage.get(this.blob(tenantId, URI.create(uri.getPath())));
 
             if (blob == null || !blob.exists()) {
                 throw new FileNotFoundException(uri + " (File not found)");
@@ -156,7 +153,7 @@ public class GcsStorage implements StorageInterface {
         if (!exists(tenantId, uri)) {
             path = path + "/";
         }
-        Blob blob = this.client().get(this.blob(path));
+        Blob blob = this.storage.get(this.blob(path));
         if (blob == null) {
             throw new FileNotFoundException("%s not found.".formatted(uri));
         }
@@ -183,7 +180,7 @@ public class GcsStorage implements StorageInterface {
                 .newBuilder(this.blob(tenantId, uri))
                 .build();
 
-            try (WriteChannel writer = this.client().writer(blobInfo)) {
+            try (WriteChannel writer = this.storage.writer(blobInfo)) {
                 byte[] buffer = new byte[10_240];
 
                 int limit;
@@ -210,7 +207,7 @@ public class GcsStorage implements StorageInterface {
             BlobInfo blobInfo = BlobInfo
                 .newBuilder(this.blob(aggregatedPath.toString()))
                 .build();
-            this.client().create(blobInfo);
+            this.storage.create(blobInfo);
         }
     }
 
@@ -231,7 +228,7 @@ public class GcsStorage implements StorageInterface {
     @Override
     public URI move(String tenantId, URI from, URI to) throws IOException {
         String path = getPath(tenantId, from);
-        StorageBatch batch = this.client().batch();
+        StorageBatch batch = this.storage.batch();
 
         if (getAttributes(tenantId, from).getType() == FileAttributes.FileType.File) {
             // move just a file
@@ -242,7 +239,7 @@ public class GcsStorage implements StorageInterface {
             // move directories
             String prefix = (!path.endsWith("/")) ? path + "/" : path;
 
-            Page<Blob> list = client().list(config.bucket, Storage.BlobListOption.prefix(prefix));
+            Page<Blob> list = this.storage.list(config.bucket, Storage.BlobListOption.prefix(prefix));
             list.streamAll().forEach(blob -> {
                 BlobId target = blob(getPath(tenantId, to) + "/" + blob.getName().substring(prefix.length()));
                 moveFile(blob.getBlobId(), target, batch);
@@ -253,19 +250,19 @@ public class GcsStorage implements StorageInterface {
     }
 
     private void moveFile(BlobId source, BlobId target, StorageBatch batch) {
-        client().copy(Storage.CopyRequest.newBuilder().setSource(source).setTarget(target).build());
+        this.storage.copy(Storage.CopyRequest.newBuilder().setSource(source).setTarget(target).build());
         batch.delete(source);
     }
 
     @Override
     public List<URI> deleteByPrefix(String tenantId, URI storagePrefix) throws IOException {
         try {
-            StorageBatch batch = this.client().batch();
+            StorageBatch batch = this.storage.batch();
             Map<URI, StorageBatchResult<Boolean>> results = new HashMap<>();
 
             String prefix = getPath(tenantId, storagePrefix);
 
-            Page<Blob> blobs = this.client()
+            Page<Blob> blobs = this.storage
                 .list(this.config.getBucket(),
                     Storage.BlobListOption.prefix(prefix)
                 );
