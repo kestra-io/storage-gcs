@@ -15,8 +15,10 @@ import java.net.URI;
 import java.nio.ByteBuffer;
 import java.nio.channels.Channels;
 import java.nio.channels.ReadableByteChannel;
+import java.nio.file.Path;
 import java.util.*;
 import java.util.stream.Collectors;
+import java.util.stream.Stream;
 
 import jakarta.inject.Inject;
 import jakarta.inject.Singleton;
@@ -87,17 +89,22 @@ public class GcsStorage implements StorageInterface {
     }
 
     @Override
+    public List<URI> filesByPrefix(String tenantId, URI prefix) {
+        String path = getPath(tenantId, prefix);
+        return blobsForPrefix(path, true)
+            .map(BlobInfo::getName)
+            // keep only files
+            .filter(blobPath -> !blobPath.endsWith("/"))
+            .map(blobPath -> URI.create("kestra://" + prefix.getPath() + blobPath.substring(path.length())))
+            .toList();
+    }
+
+    @Override
     public List<FileAttributes> list(String tenantId, URI uri) throws IOException {
         String path = getPath(tenantId, uri);
         String prefix = (path.endsWith("/")) ? path : path + "/";
-        Page<Blob> blobs = this.storage.list(config.bucket, Storage.BlobListOption.prefix(prefix),
-            Storage.BlobListOption.currentDirectory());
-        List<FileAttributes> list = blobs.streamAll()
-            .filter(blob -> {
-                String key = blob.getName().substring(prefix.length());
-                // Remove recursive result and requested dir
-                return !key.isEmpty() && !Objects.equals(key, prefix) && new File(key).getParent() == null;
-            })
+
+        List<FileAttributes> list = blobsForPrefix(prefix, false)
             .map(throwFunction(this::getGcsFileAttributes))
             .toList();
         if(list.isEmpty()) {
@@ -105,6 +112,22 @@ public class GcsStorage implements StorageInterface {
             this.getAttributes(tenantId, uri);
         }
         return list;
+    }
+
+    private Stream<Blob> blobsForPrefix(String prefix, boolean recursive) {
+        Storage.BlobListOption[] blobListOptions = Stream.concat(
+            Stream.of(Storage.BlobListOption.prefix(prefix)),
+            recursive ? Stream.empty() : Stream.of(Storage.BlobListOption.currentDirectory())
+        ).toArray(Storage.BlobListOption[]::new);
+        Page<Blob> blobs = this.storage.list(config.bucket, blobListOptions);
+        return blobs.streamAll()
+            .filter(blob -> {
+                String key = blob.getName().substring(prefix.length());
+                // Remove recursive result and requested dir
+                return !key.isEmpty()
+                    && !Objects.equals(key, prefix)
+                    && (recursive || Path.of(key).getParent() == null);
+            });
     }
 
     @Override
