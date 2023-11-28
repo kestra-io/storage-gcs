@@ -211,8 +211,24 @@ public class GcsStorage implements StorageInterface {
         }
     }
 
+    @Override
     public boolean delete(String tenantId, URI uri) throws IOException {
-        return !deleteByPrefix(tenantId, uri).isEmpty();
+        FileAttributes fileAttributes;
+        try {
+            fileAttributes = getAttributes(tenantId, uri);
+        } catch (FileNotFoundException e) {
+            return false;
+        }
+
+
+        if (fileAttributes.getType() == FileAttributes.FileType.Directory) {
+            return !this.deleteByPrefix(
+                tenantId,
+                uri.getPath().endsWith("/") ? uri : URI.create(uri.getPath() + "/")
+            ).isEmpty();
+        }
+
+        return this.storage.delete(this.blob(tenantId, uri));
     }
 
     @Override
