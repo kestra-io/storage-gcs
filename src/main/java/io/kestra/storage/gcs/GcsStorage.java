@@ -89,12 +89,10 @@ public class GcsStorage implements StorageInterface {
     }
 
     @Override
-    public List<URI> filesByPrefix(String tenantId, URI prefix) {
+    public List<URI> allByPrefix(String tenantId, URI prefix, boolean includeDirectories) {
         String path = getPath(tenantId, prefix);
-        return blobsForPrefix(path, true)
+        return blobsForPrefix(path, true, includeDirectories)
             .map(BlobInfo::getName)
-            // keep only files
-            .filter(blobPath -> !blobPath.endsWith("/"))
             .map(blobPath -> URI.create("kestra://" + prefix.getPath() + blobPath.substring(path.length())))
             .toList();
     }
@@ -104,7 +102,7 @@ public class GcsStorage implements StorageInterface {
         String path = getPath(tenantId, uri);
         String prefix = (path.endsWith("/")) ? path : path + "/";
 
-        List<FileAttributes> list = blobsForPrefix(prefix, false)
+        List<FileAttributes> list = blobsForPrefix(prefix, false, true)
             .map(throwFunction(this::getGcsFileAttributes))
             .toList();
         if(list.isEmpty()) {
@@ -114,7 +112,7 @@ public class GcsStorage implements StorageInterface {
         return list;
     }
 
-    private Stream<Blob> blobsForPrefix(String prefix, boolean recursive) {
+    private Stream<Blob> blobsForPrefix(String prefix, boolean recursive, boolean includeDirectories) {
         Storage.BlobListOption[] blobListOptions = Stream.concat(
             Stream.of(Storage.BlobListOption.prefix(prefix)),
             recursive ? Stream.empty() : Stream.of(Storage.BlobListOption.currentDirectory())
@@ -126,7 +124,9 @@ public class GcsStorage implements StorageInterface {
                 // Remove recursive result and requested dir
                 return !key.isEmpty()
                     && !Objects.equals(key, prefix)
-                    && (recursive || Path.of(key).getParent() == null);
+                    && !key.equals("/")
+                    && (recursive || Path.of(key).getParent() == null)
+                    && (includeDirectories || !key.endsWith("/"));
             });
     }
 
