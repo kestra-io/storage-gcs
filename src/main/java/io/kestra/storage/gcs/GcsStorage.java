@@ -22,7 +22,6 @@ import java.util.stream.Stream;
 
 import jakarta.inject.Inject;
 import jakarta.inject.Singleton;
-import org.jetbrains.annotations.NotNull;
 
 import static io.kestra.core.utils.Rethrow.throwFunction;
 
@@ -42,12 +41,10 @@ public class GcsStorage implements StorageInterface {
         return blob(path);
     }
 
-    @NotNull
     private BlobId blob(String path) {
         return BlobId.of(this.config.getBucket(), path);
     }
 
-    @NotNull
     private String getPath(String tenantId, URI uri) {
         if (uri == null) {
             uri = URI.create("/");
