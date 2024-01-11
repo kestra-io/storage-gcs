@@ -141,36 +141,6 @@ public class GcsStorage implements StorageInterface {
     }
 
     @Override
-    public Long size(String tenantId,URI uri) throws IOException {
-        try {
-            Blob blob = this.storage.get(this.blob(tenantId, URI.create(uri.getPath())));
-
-            if (blob == null || !blob.exists()) {
-                throw new FileNotFoundException(uri + " (File not found)");
-            }
-
-            return blob.getSize();
-        } catch (StorageException e) {
-            throw new IOException(e);
-        }
-    }
-
-    @Override
-    public Long lastModifiedTime(String tenantId,URI uri) throws IOException {
-        try {
-            Blob blob = this.storage.get(this.blob(tenantId, URI.create(uri.getPath())));
-
-            if (blob == null || !blob.exists()) {
-                throw new FileNotFoundException(uri + " (File not found)");
-            }
-
-            return blob.getUpdateTimeOffsetDateTime().toInstant().toEpochMilli();
-        } catch (StorageException e) {
-            throw new IOException(e);
-        }
-    }
-
-    @Override
     public FileAttributes getAttributes(String tenantId, URI uri) throws IOException {
         String path = getPath(tenantId, uri);
         if (!exists(tenantId, uri)) {
