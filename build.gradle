@@ -59,7 +59,7 @@ dependencies {
     compileOnly group: "io.kestra", name: "core", version: kestraVersion
 
     // libs
-    api platform('com.google.cloud:libraries-bom:26.29.0')
+    api platform('com.google.cloud:libraries-bom:26.33.0')
     api 'com.google.cloud:google-cloud-storage'
 }
 
