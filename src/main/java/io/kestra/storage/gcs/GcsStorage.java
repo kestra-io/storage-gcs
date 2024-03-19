@@ -188,12 +188,26 @@ public class GcsStorage implements StorageInterface {
     }
 
     private void mkdirs(String path) {
-        path = path.replaceAll("^/*", "");
+        if (!path.endsWith("/")) {
+            path = path.substring(0, path.lastIndexOf("/") + 1);
+        }
+
+        // check if it exists before creating it
+        Page<Blob> pathBlob = this.storage.list(this.config.getBucket(), Storage.BlobListOption.prefix(path), Storage.BlobListOption.pageSize(1));
+        if(pathBlob != null && pathBlob.hasNextPage()) {
+            return;
+        }
+
         String[] directories = path.split("/");
         StringBuilder aggregatedPath = new StringBuilder("/");
         // perform 1 put request per parent directory in the path
-        for (int i = 0; i <= directories.length - (path.endsWith("/") ? 1 : 2); i++) {
+        for (int i = 1; i < directories.length; i++) {
             aggregatedPath.append(directories[i]).append("/");
+            // check if it exists before creating it
+            Page<Blob> currentDir = this.storage.list(this.config.getBucket(), Storage.BlobListOption.prefix(aggregatedPath.toString()), Storage.BlobListOption.pageSize(1));
+            if(currentDir != null && currentDir.hasNextPage()) {
+                continue;
+            }
             BlobInfo blobInfo = BlobInfo
                 .newBuilder(this.blob(aggregatedPath.toString()))
                 .build();
