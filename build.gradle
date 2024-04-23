@@ -22,8 +22,8 @@ repositories {
     }
 }
 
-sourceCompatibility = 17
-targetCompatibility = 17
+sourceCompatibility = 21
+targetCompatibility = 21
 
 group "io.kestra.storage"
 description = 'Google Cloud Storage storage plugin for Kestra'
@@ -57,6 +57,7 @@ dependencies {
 
     // kestra
     compileOnly group: "io.kestra", name: "core", version: kestraVersion
+    annotationProcessor group: "io.kestra", name: "processor", version: kestraVersion
 
     // libs
     api platform('com.google.cloud:libraries-bom:26.37.0')
@@ -99,6 +100,7 @@ dependencies {
 
     testImplementation group: "io.kestra", name: "core", version: kestraVersion
     testImplementation group: "io.kestra", name: "core", version: kestraVersion, classifier: 'tests'
+    testAnnotationProcessor group: "io.kestra", name: "processor", version: kestraVersion
 }
 
 /**********************************************************************************************************************\

@@ -3,6 +3,7 @@ package io.kestra.storage.gcs;
 import com.google.api.gax.paging.Page;
 import com.google.cloud.WriteChannel;
 import com.google.cloud.storage.*;
+import io.kestra.core.models.annotations.Plugin;
 import io.kestra.core.storages.FileAttributes;
 import io.micronaut.core.annotation.Introspected;
 import io.kestra.core.storages.StorageInterface;
@@ -22,19 +23,21 @@ import java.util.stream.Stream;
 
 import jakarta.inject.Inject;
 import jakarta.inject.Singleton;
+import lombok.NoArgsConstructor;
 
 import static io.kestra.core.utils.Rethrow.throwFunction;
 
 @Singleton
 @GcsStorageEnabled
 @Introspected
+@Plugin
+@NoArgsConstructor
 public class GcsStorage implements StorageInterface {
     @Inject
     Storage storage;
 
     @Inject
     GcsConfig config;
-
 
     private BlobId blob(String tenantId, URI uri) {
         String path = getPath(tenantId, uri);
