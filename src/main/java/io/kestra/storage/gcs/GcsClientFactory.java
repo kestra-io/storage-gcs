@@ -4,17 +4,13 @@ import com.google.auth.oauth2.GoogleCredentials;
 import com.google.auth.oauth2.ServiceAccountCredentials;
 import com.google.cloud.storage.Storage;
 import com.google.cloud.storage.StorageOptions;
-import io.micronaut.context.annotation.Factory;
 import lombok.SneakyThrows;
 
 import java.io.ByteArrayInputStream;
-import jakarta.inject.Singleton;
 
-@Factory
-@GcsStorageEnabled
 public class GcsClientFactory {
     @SneakyThrows
-    protected GoogleCredentials credentials(GcsConfig config) {
+    protected static GoogleCredentials credentials(final GcsConfig config) {
         GoogleCredentials credentials;
 
         if (config.getServiceAccount() != null) {
@@ -24,15 +20,13 @@ public class GcsClientFactory {
         } else {
             credentials = GoogleCredentials.getApplicationDefault();
         }
-
         return credentials;
     }
 
-    @Singleton
-    public Storage of(GcsConfig config) {
+    public static Storage of(final GcsConfig config) {
         return StorageOptions
             .newBuilder()
-            .setCredentials(this.credentials(config))
+            .setCredentials(credentials(config))
             .setProjectId(config.getProjectId())
             .build()
             .getService();
