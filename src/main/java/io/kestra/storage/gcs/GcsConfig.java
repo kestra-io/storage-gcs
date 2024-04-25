@@ -1,17 +1,19 @@
 package io.kestra.storage.gcs;
 
-import io.micronaut.context.annotation.ConfigurationProperties;
-import lombok.Getter;
+import com.fasterxml.jackson.annotation.JsonProperty;
+import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.NotNull;
 
-import jakarta.inject.Singleton;
+public interface GcsConfig {
 
-@Singleton
-@Getter
-@ConfigurationProperties("kestra.storage.gcs")
-public class GcsConfig {
-    String bucket;
+    @JsonProperty
+    @NotNull
+    @NotBlank
+    String getBucket();
 
-    String serviceAccount;
+    @JsonProperty
+    String getServiceAccount();
 
-    String projectId;
+    @JsonProperty
+    String getProjectId();
 }

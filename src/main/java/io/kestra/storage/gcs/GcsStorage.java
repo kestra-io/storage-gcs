@@ -5,7 +5,6 @@ import com.google.cloud.WriteChannel;
 import com.google.cloud.storage.*;
 import io.kestra.core.models.annotations.Plugin;
 import io.kestra.core.storages.FileAttributes;
-import io.micronaut.core.annotation.Introspected;
 import io.kestra.core.storages.StorageInterface;
 
 import java.io.File;
@@ -21,23 +20,54 @@ import java.util.*;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
-import jakarta.inject.Inject;
-import jakarta.inject.Singleton;
+import lombok.AccessLevel;
+import lombok.AllArgsConstructor;
+import lombok.Builder;
+import lombok.Getter;
 import lombok.NoArgsConstructor;
+import lombok.extern.jackson.Jacksonized;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import static io.kestra.core.utils.Rethrow.throwFunction;
 
-@Singleton
-@GcsStorageEnabled
-@Introspected
-@Plugin
+@AllArgsConstructor
 @NoArgsConstructor
-public class GcsStorage implements StorageInterface {
-    @Inject
-    Storage storage;
+@Builder
+@Jacksonized
+@Getter
+@Plugin
+@Plugin.Id("gcs")
+public class GcsStorage implements StorageInterface, GcsConfig {
 
-    @Inject
-    GcsConfig config;
+    private static final Logger log = LoggerFactory.getLogger(GcsStorage.class);
+
+    private String bucket;
+
+    private String serviceAccount;
+
+    private String projectId;
+
+    @Getter(AccessLevel.PRIVATE)
+    private Storage storage;
+
+    /** {@inheritDoc} **/
+    @Override
+    public void init() {
+        this.storage = GcsClientFactory.of(this);
+    }
+
+    /** {@inheritDoc} **/
+    @Override
+    public void close() {
+        if (this.storage != null) {
+            try {
+                this.storage.close();
+            } catch (Exception e) {
+               log.warn("Failed to close GcsStorage", e);
+            }
+        }
+    }
 
     private BlobId blob(String tenantId, URI uri) {
         String path = getPath(tenantId, uri);
@@ -45,7 +75,7 @@ public class GcsStorage implements StorageInterface {
     }
 
     private BlobId blob(String path) {
-        return BlobId.of(this.config.getBucket(), path);
+        return BlobId.of(bucket, path);
     }
 
     private String getPath(String tenantId, URI uri) {
@@ -117,7 +147,7 @@ public class GcsStorage implements StorageInterface {
             Stream.of(Storage.BlobListOption.prefix(prefix)),
             recursive ? Stream.empty() : Stream.of(Storage.BlobListOption.currentDirectory())
         ).toArray(Storage.BlobListOption[]::new);
-        Page<Blob> blobs = this.storage.list(config.bucket, blobListOptions);
+        Page<Blob> blobs = this.storage.list(bucket, blobListOptions);
         return blobs.streamAll()
             .filter(blob -> {
                 String key = blob.getName().substring(prefix.length());
@@ -196,7 +226,7 @@ public class GcsStorage implements StorageInterface {
         }
 
         // check if it exists before creating it
-        Page<Blob> pathBlob = this.storage.list(this.config.getBucket(), Storage.BlobListOption.prefix(path), Storage.BlobListOption.pageSize(1));
+        Page<Blob> pathBlob = this.storage.list(bucket, Storage.BlobListOption.prefix(path), Storage.BlobListOption.pageSize(1));
         if(pathBlob != null && pathBlob.hasNextPage()) {
             return;
         }
@@ -207,7 +237,7 @@ public class GcsStorage implements StorageInterface {
         for (int i = 1; i < directories.length; i++) {
             aggregatedPath.append(directories[i]).append("/");
             // check if it exists before creating it
-            Page<Blob> currentDir = this.storage.list(this.config.getBucket(), Storage.BlobListOption.prefix(aggregatedPath.toString()), Storage.BlobListOption.pageSize(1));
+            Page<Blob> currentDir = this.storage.list(bucket, Storage.BlobListOption.prefix(aggregatedPath.toString()), Storage.BlobListOption.pageSize(1));
             if(currentDir != null && currentDir.hasNextPage()) {
                 continue;
             }
@@ -262,7 +292,7 @@ public class GcsStorage implements StorageInterface {
             // move directories
             String prefix = (!path.endsWith("/")) ? path + "/" : path;
 
-            Page<Blob> list = this.storage.list(config.bucket, Storage.BlobListOption.prefix(prefix));
+            Page<Blob> list = this.storage.list(bucket, Storage.BlobListOption.prefix(prefix));
             list.streamAll().forEach(blob -> {
                 BlobId target = blob(getPath(tenantId, to) + "/" + blob.getName().substring(prefix.length()));
                 moveFile(blob.getBlobId(), target, batch);
@@ -286,9 +316,7 @@ public class GcsStorage implements StorageInterface {
             String prefix = getPath(tenantId, storagePrefix);
 
             Page<Blob> blobs = this.storage
-                .list(this.config.getBucket(),
-                    Storage.BlobListOption.prefix(prefix)
-                );
+                .list(bucket, Storage.BlobListOption.prefix(prefix));
 
             for (Blob blob : blobs.iterateAll()) {
                 results.put(URI.create("kestra://" + blob.getBlobId().getName().replace(tenantId + "/", "").replaceAll("/$", "")), batch.delete(blob.getBlobId()));
