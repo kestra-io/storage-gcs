@@ -54,7 +54,7 @@ dependencies {
     compileOnly'org.slf4j:slf4j-api:2.0.13'
 
     // libs
-    api platform('com.google.cloud:libraries-bom:26.37.0')
+    api platform('com.google.cloud:libraries-bom:26.38.0')
     api 'com.google.cloud:google-cloud-storage'
 }
 
