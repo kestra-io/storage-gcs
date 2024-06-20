@@ -94,7 +94,7 @@ dependencies {
     testImplementation "org.hamcrest:hamcrest-library:2.2"
 
     testImplementation group: "io.kestra", name: "core", version: kestraVersion
-    testImplementation group: "io.kestra", name: "core", version: kestraVersion, classifier: 'tests'
+    testImplementation group: "io.kestra", name: "tests", version: kestraVersion
     testAnnotationProcessor group: "io.kestra", name: "processor", version: kestraVersion
 }
 
