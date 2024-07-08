@@ -20,6 +20,7 @@ import java.util.*;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
+import io.kestra.core.storages.StorageObject;
 import lombok.AccessLevel;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
@@ -104,6 +105,11 @@ public class GcsStorage implements StorageInterface, GcsConfig {
 
     @Override
     public InputStream get(String tenantId, URI uri) throws IOException {
+        return getWithMetadata(tenantId, uri).inputStream();
+    }
+
+    @Override
+    public StorageObject getWithMetadata(String tenantId, URI uri) throws IOException {
         try {
             Blob blob = this.storage.get(this.blob(tenantId, URI.create(uri.getPath())));
 
@@ -112,7 +118,7 @@ public class GcsStorage implements StorageInterface, GcsConfig {
             }
 
             ReadableByteChannel reader = blob.reader();
-            return Channels.newInputStream(reader);
+            return new StorageObject(blob.getMetadata(), Channels.newInputStream(reader));
         } catch (StorageException e) {
             throw new IOException(e);
         }
@@ -194,16 +200,18 @@ public class GcsStorage implements StorageInterface, GcsConfig {
     }
 
     @Override
-    public URI put(String tenantId, URI uri, InputStream data) throws IOException {
+    public URI put(String tenantId, URI uri, StorageObject storageObject) throws IOException {
         try {
             String path = getPath(tenantId, uri);
             mkdirs(path);
 
             BlobInfo blobInfo = BlobInfo
                 .newBuilder(this.blob(tenantId, uri))
+                .setMetadata(storageObject.metadata())
                 .build();
 
-            try (WriteChannel writer = this.storage.writer(blobInfo)) {
+            try (WriteChannel writer = this.storage.writer(blobInfo);
+                 InputStream data = storageObject.inputStream()) {
                 byte[] buffer = new byte[10_240];
 
                 int limit;
@@ -211,8 +219,6 @@ public class GcsStorage implements StorageInterface, GcsConfig {
                     writer.write(ByteBuffer.wrap(buffer, 0, limit));
                 }
             }
-
-            data.close();
 
             return URI.create("kestra://" + uri.getPath());
         } catch (StorageException e) {
