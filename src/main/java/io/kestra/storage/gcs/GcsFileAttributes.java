@@ -7,6 +7,7 @@ import lombok.Value;
 
 import java.time.Instant;
 import java.time.OffsetDateTime;
+import java.util.Map;
 import java.util.Optional;
 
 @Value
@@ -44,5 +45,10 @@ public class GcsFileAttributes implements FileAttributes {
     @Override
     public long getSize() {
         return blobInfo.getSize();
+    }
+
+    @Override
+    public Map<String, String> getMetadata() {
+        return blobInfo.getMetadata();
     }
 }
