@@ -202,22 +202,13 @@ public class GcsStorage implements StorageInterface, GcsConfig {
     @Override
     public URI put(String tenantId, URI uri, StorageObject storageObject) throws IOException {
         try {
-            String path = getPath(tenantId, uri);
-            mkdirs(path);
-
             BlobInfo blobInfo = BlobInfo
                 .newBuilder(this.blob(tenantId, uri))
                 .setMetadata(storageObject.metadata())
                 .build();
 
-            try (WriteChannel writer = this.storage.writer(blobInfo);
-                 InputStream data = storageObject.inputStream()) {
-                byte[] buffer = new byte[10_240];
-
-                int limit;
-                while ((limit = data.read(buffer)) >= 0) {
-                    writer.write(ByteBuffer.wrap(buffer, 0, limit));
-                }
+            try (InputStream data = storageObject.inputStream()) {
+                this.storage.createFrom(blobInfo, data);
             }
 
             return URI.create("kestra://" + uri.getPath());
