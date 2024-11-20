@@ -30,6 +30,8 @@ import lombok.extern.jackson.Jacksonized;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import javax.annotation.Nullable;
+
 import static io.kestra.core.utils.Rethrow.throwFunction;
 
 @AllArgsConstructor
@@ -104,12 +106,12 @@ public class GcsStorage implements StorageInterface, GcsConfig {
     }
 
     @Override
-    public InputStream get(String tenantId, URI uri) throws IOException {
-        return getWithMetadata(tenantId, uri).inputStream();
+    public InputStream get(String tenantId, @Nullable String namespace, URI uri) throws IOException {
+        return getWithMetadata(tenantId, namespace, uri).inputStream();
     }
 
     @Override
-    public StorageObject getWithMetadata(String tenantId, URI uri) throws IOException {
+    public StorageObject getWithMetadata(String tenantId, @Nullable String namespace, URI uri) throws IOException {
         try {
             Blob blob = this.storage.get(this.blob(tenantId, URI.create(uri.getPath())));
 
@@ -125,7 +127,7 @@ public class GcsStorage implements StorageInterface, GcsConfig {
     }
 
     @Override
-    public List<URI> allByPrefix(String tenantId, URI prefix, boolean includeDirectories) {
+    public List<URI> allByPrefix(String tenantId, @Nullable String namespace, URI prefix, boolean includeDirectories) {
         String path = getPath(tenantId, prefix);
         return blobsForPrefix(path, true, includeDirectories)
             .map(BlobInfo::getName)
@@ -134,7 +136,7 @@ public class GcsStorage implements StorageInterface, GcsConfig {
     }
 
     @Override
-    public List<FileAttributes> list(String tenantId, URI uri) throws IOException {
+    public List<FileAttributes> list(String tenantId, @Nullable String namespace, URI uri) throws IOException {
         String path = getPath(tenantId, uri);
         String prefix = (path.endsWith("/")) ? path : path + "/";
 
@@ -143,7 +145,7 @@ public class GcsStorage implements StorageInterface, GcsConfig {
             .toList();
         if(list.isEmpty()) {
             // this will throw FileNotFound if there is no directory
-            this.getAttributes(tenantId, uri);
+            this.getAttributes(tenantId, namespace, uri);
         }
         return list;
     }
@@ -167,7 +169,7 @@ public class GcsStorage implements StorageInterface, GcsConfig {
     }
 
     @Override
-    public boolean exists(String tenantId, URI uri) {
+    public boolean exists(String tenantId, @Nullable String namespace, URI uri) {
         try {
             Blob blob = this.storage.get(this.blob(tenantId, URI.create(uri.getPath())));
             return blob != null && blob.exists();
@@ -177,9 +179,9 @@ public class GcsStorage implements StorageInterface, GcsConfig {
     }
 
     @Override
-    public FileAttributes getAttributes(String tenantId, URI uri) throws IOException {
+    public FileAttributes getAttributes(String tenantId, @Nullable String namespace, URI uri) throws IOException {
         String path = getPath(tenantId, uri);
-        if (!exists(tenantId, uri)) {
+        if (!exists(tenantId, namespace, uri)) {
             path = path + "/";
         }
         Blob blob = this.storage.get(this.blob(path));
@@ -200,7 +202,7 @@ public class GcsStorage implements StorageInterface, GcsConfig {
     }
 
     @Override
-    public URI put(String tenantId, URI uri, StorageObject storageObject) throws IOException {
+    public URI put(String tenantId, @Nullable String namespace, URI uri, StorageObject storageObject) throws IOException {
         try {
             String path = getPath(tenantId, uri);
             mkdirs(path);
@@ -255,10 +257,10 @@ public class GcsStorage implements StorageInterface, GcsConfig {
     }
 
     @Override
-    public boolean delete(String tenantId, URI uri) throws IOException {
+    public boolean delete(String tenantId, @Nullable String namespace, URI uri) throws IOException {
         FileAttributes fileAttributes;
         try {
-            fileAttributes = getAttributes(tenantId, uri);
+            fileAttributes = getAttributes(tenantId, namespace, uri);
         } catch (FileNotFoundException e) {
             return false;
         }
@@ -267,6 +269,7 @@ public class GcsStorage implements StorageInterface, GcsConfig {
         if (fileAttributes.getType() == FileAttributes.FileType.Directory) {
             return !this.deleteByPrefix(
                 tenantId,
+                namespace,
                 uri.getPath().endsWith("/") ? uri : URI.create(uri.getPath() + "/")
             ).isEmpty();
         }
@@ -275,7 +278,7 @@ public class GcsStorage implements StorageInterface, GcsConfig {
     }
 
     @Override
-    public URI createDirectory(String tenantId, URI uri) {
+    public URI createDirectory(String tenantId, @Nullable String namespace, URI uri) {
         String path = getPath(tenantId, uri);
         if (!path.endsWith("/")) {
             path = path + "/";
@@ -285,11 +288,11 @@ public class GcsStorage implements StorageInterface, GcsConfig {
     }
 
     @Override
-    public URI move(String tenantId, URI from, URI to) throws IOException {
+    public URI move(String tenantId, @Nullable String namespace, URI from, URI to) throws IOException {
         String path = getPath(tenantId, from);
         StorageBatch batch = this.storage.batch();
 
-        if (getAttributes(tenantId, from).getType() == FileAttributes.FileType.File) {
+        if (getAttributes(tenantId, namespace, from).getType() == FileAttributes.FileType.File) {
             // move just a file
             BlobId source = blob(path);
             BlobId target = blob(tenantId, to);
@@ -314,7 +317,7 @@ public class GcsStorage implements StorageInterface, GcsConfig {
     }
 
     @Override
-    public List<URI> deleteByPrefix(String tenantId, URI storagePrefix) throws IOException {
+    public List<URI> deleteByPrefix(String tenantId, @Nullable String namespace, URI storagePrefix) throws IOException {
         try {
             StorageBatch batch = this.storage.batch();
             Map<URI, StorageBatchResult<Boolean>> results = new HashMap<>();
