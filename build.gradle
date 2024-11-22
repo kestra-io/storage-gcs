@@ -34,14 +34,6 @@ tasks.withType(JavaCompile) {
     options.compilerArgs.add("-parameters")
 }
 
-configurations.all {
-    resolutionStrategy {
-        // micronaut bom import version not compatible with google one
-        force("com.google.protobuf:protobuf-java:3.25.3")
-        force("com.google.protobuf:protobuf-java-util:3.25.3")
-    }
-}
-
 dependencies {
     // Platform
     annotationProcessor enforcedPlatform("io.kestra:platform:$kestraVersion")
@@ -60,7 +52,7 @@ dependencies {
     compileOnly'org.slf4j:slf4j-api'
 
     // libs
-    api platform('com.google.cloud:libraries-bom:26.47.0')
+    api platform('com.google.cloud:libraries-bom:26.50.0')
     api 'com.google.cloud:google-cloud-storage'
 }
 
