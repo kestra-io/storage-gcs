@@ -4,6 +4,7 @@ import com.google.api.gax.paging.Page;
 import com.google.cloud.WriteChannel;
 import com.google.cloud.storage.*;
 import io.kestra.core.storages.FileAttributes;
+import io.micronaut.context.annotation.Value;
 import io.micronaut.core.annotation.Introspected;
 import io.kestra.core.storages.StorageInterface;
 
@@ -17,6 +18,7 @@ import java.nio.channels.Channels;
 import java.nio.channels.ReadableByteChannel;
 import java.nio.file.Path;
 import java.util.*;
+import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
@@ -29,11 +31,16 @@ import static io.kestra.core.utils.Rethrow.throwFunction;
 @GcsStorageEnabled
 @Introspected
 public class GcsStorage implements StorageInterface {
+    private static final Pattern LEADING_SLASH_PATTERN = Pattern.compile("^/+");
+
     @Inject
     Storage storage;
 
     @Inject
     GcsConfig config;
+
+    @Value("${kestra.storage.leadingSlash:true}")
+    boolean leadingSlash;
 
 
     private BlobId blob(String tenantId, URI uri) {
@@ -46,20 +53,17 @@ public class GcsStorage implements StorageInterface {
     }
 
     private String getPath(String tenantId, URI uri) {
+        String prefix = this.leadingSlash ? "/" : "";
         if (uri == null) {
-            uri = URI.create("/");
+            uri = URI.create(prefix);
         }
 
         parentTraversalGuard(uri);
-        String path = uri.getPath();
-        if (!path.startsWith("/")) {
-            path = "/" + path;
-        }
-
+        String path = LEADING_SLASH_PATTERN.matcher(uri.getPath()).replaceAll("");
         if (tenantId == null) {
-            return path;
+            return prefix + path.replaceAll("^/", "");
         }
-        return "/" + tenantId + path;
+        return prefix + tenantId + "/" + path;
     }
 
     // Traversal does not work with gcs but it just return empty objects so throwing is more explicit
