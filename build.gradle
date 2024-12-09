@@ -51,8 +51,8 @@ dependencies {
     // Logs
     compileOnly'org.slf4j:slf4j-api'
 
-    // libs
-    api platform('com.google.cloud:libraries-bom:26.50.0')
+    // Google libraries are managed by the the Kestra Platform so they are aligned on all plugins
+    api platform('com.google.cloud:libraries-bom')
     api 'com.google.cloud:google-cloud-storage'
 }
 
