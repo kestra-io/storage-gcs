@@ -98,13 +98,6 @@ public class GcsStorage implements StorageInterface, GcsConfig {
         return "/" + tenantId + path;
     }
 
-    // Traversal does not work with gcs but it just return empty objects so throwing is more explicit
-    private void parentTraversalGuard(URI uri) {
-        if (uri.toString().contains("..")) {
-            throw new IllegalArgumentException("File should be accessed with their full path and not using relative '..' path.");
-        }
-    }
-
     @Override
     public InputStream get(String tenantId, @Nullable String namespace, URI uri) throws IOException {
         return getWithMetadata(tenantId, namespace, uri).inputStream();
