@@ -51,6 +51,8 @@ public class GcsStorage implements StorageInterface, GcsConfig {
 
     private String projectId;
 
+    private boolean leadingSlash;
+
     @Getter(AccessLevel.PRIVATE)
     private Storage storage;
 
@@ -92,10 +94,7 @@ public class GcsStorage implements StorageInterface, GcsConfig {
             path = "/" + path;
         }
 
-        if (tenantId == null) {
-            return path;
-        }
-        return "/" + tenantId + path;
+        return this.normalizePath(tenantId == null ? path : ("/" + tenantId + path));
     }
 
     @Override
@@ -131,7 +130,12 @@ public class GcsStorage implements StorageInterface, GcsConfig {
     @Override
     public List<FileAttributes> list(String tenantId, @Nullable String namespace, URI uri) throws IOException {
         String path = getPath(tenantId, uri);
-        String prefix = (path.endsWith("/")) ? path : path + "/";
+        String prefix;
+        if (path.endsWith("/") || (!this.isLeadingSlash() && path.isEmpty())) {
+            prefix = path;
+        } else {
+            prefix = path + "/";
+        }
 
         List<FileAttributes> list = blobsForPrefix(prefix, false, true)
             .map(throwFunction(this::getGcsFileAttributes))
@@ -233,13 +237,18 @@ public class GcsStorage implements StorageInterface, GcsConfig {
         }
 
         String[] directories = path.split("/");
-        StringBuilder aggregatedPath = new StringBuilder("/");
+        StringBuilder aggregatedPath = new StringBuilder();
         // perform 1 put request per parent directory in the path
-        for (int i = 1; i < directories.length; i++) {
-            aggregatedPath.append(directories[i]).append("/");
+        for (String pathPart : directories) {
+            aggregatedPath.append(pathPart).append("/");
+
+            if (pathPart.isEmpty()) {
+                continue;
+            }
+
             // check if it exists before creating it
             Page<Blob> currentDir = this.storage.list(bucket, Storage.BlobListOption.prefix(aggregatedPath.toString()), Storage.BlobListOption.pageSize(1));
-            if(currentDir != null && currentDir.hasNextPage()) {
+            if (currentDir != null && currentDir.hasNextPage()) {
                 continue;
             }
             BlobInfo blobInfo = BlobInfo
