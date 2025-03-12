@@ -108,7 +108,7 @@ public class GcsStorage implements StorageInterface, GcsConfig {
         try {
             Blob blob = this.storage.get(this.blob(tenantId, URI.create(uri.getPath())));
 
-            if (blob == null || !blob.exists()) {
+            if (blob == null) {
                 throw new FileNotFoundException(uri + " (File not found)");
             }
 
