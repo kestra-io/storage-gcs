@@ -81,23 +81,6 @@ public class GcsStorage implements StorageInterface, GcsConfig {
         return BlobId.of(bucket, path);
     }
 
-    private String getPath(String tenantId, URI uri) {
-        if (uri == null) {
-            uri = URI.create("/");
-        }
-
-        parentTraversalGuard(uri);
-        String path = uri.getPath();
-        if (!path.startsWith("/")) {
-            path = "/" + path;
-        }
-
-        if (tenantId == null) {
-            return path;
-        }
-        return "/" + tenantId + path;
-    }
-
     @Override
     public InputStream get(String tenantId, @Nullable String namespace, URI uri) throws IOException {
         return getWithMetadata(tenantId, namespace, uri).inputStream();
@@ -233,9 +216,9 @@ public class GcsStorage implements StorageInterface, GcsConfig {
         }
 
         String[] directories = path.split("/");
-        StringBuilder aggregatedPath = new StringBuilder("/");
+        StringBuilder aggregatedPath = new StringBuilder();
         // perform 1 put request per parent directory in the path
-        for (int i = 1; i < directories.length; i++) {
+        for (int i = 0; i < directories.length; i++) {
             aggregatedPath.append(directories[i]).append("/");
             // check if it exists before creating it
             Page<Blob> currentDir = this.storage.list(bucket, Storage.BlobListOption.prefix(aggregatedPath.toString()), Storage.BlobListOption.pageSize(1));
@@ -321,7 +304,7 @@ public class GcsStorage implements StorageInterface, GcsConfig {
                 .list(bucket, Storage.BlobListOption.prefix(prefix));
 
             for (Blob blob : blobs.iterateAll()) {
-                results.put(URI.create("kestra://" + blob.getBlobId().getName().replace(tenantId + "/", "").replaceAll("/$", "")), batch.delete(blob.getBlobId()));
+                results.put(URI.create("kestra://" + blob.getBlobId().getName().replace(tenantId, "").replaceAll("/$", "")), batch.delete(blob.getBlobId()));
             }
 
             if (results.isEmpty()) {
