@@ -17,6 +17,7 @@ import java.nio.channels.Channels;
 import java.nio.channels.ReadableByteChannel;
 import java.nio.file.Path;
 import java.util.*;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
@@ -42,6 +43,7 @@ import static io.kestra.core.utils.Rethrow.throwFunction;
 @Plugin
 @Plugin.Id("gcs")
 public class GcsStorage implements StorageInterface, GcsConfig {
+    private final Set<String> createdDirectories = ConcurrentHashMap.newKeySet();
 
     private static final Logger log = LoggerFactory.getLogger(GcsStorage.class);
 
@@ -67,7 +69,7 @@ public class GcsStorage implements StorageInterface, GcsConfig {
             try {
                 this.storage.close();
             } catch (Exception e) {
-               log.warn("Failed to close GcsStorage", e);
+                log.warn("Failed to close GcsStorage", e);
             }
         }
     }
@@ -205,30 +207,28 @@ public class GcsStorage implements StorageInterface, GcsConfig {
     }
 
     private void mkdirs(String path) {
-        if (!path.endsWith("/")) {
-            path = path.substring(0, path.lastIndexOf("/") + 1);
-        }
+        if (path == null || path.isEmpty()) return;
 
-        // check if it exists before creating it
-        Page<Blob> pathBlob = this.storage.list(bucket, Storage.BlobListOption.prefix(path), Storage.BlobListOption.pageSize(1));
-        if(pathBlob != null && pathBlob.hasNextPage()) {
-            return;
-        }
+        String dirPath = path.endsWith("/") ? path : path.substring(0, path.lastIndexOf('/') + 1);
 
-        String[] directories = path.split("/");
-        StringBuilder aggregatedPath = new StringBuilder();
-        // perform 1 put request per parent directory in the path
-        for (int i = 0; i < directories.length; i++) {
-            aggregatedPath.append(directories[i]).append("/");
-            // check if it exists before creating it
-            Page<Blob> currentDir = this.storage.list(bucket, Storage.BlobListOption.prefix(aggregatedPath.toString()), Storage.BlobListOption.pageSize(1));
-            if(currentDir != null && currentDir.hasNextPage()) {
-                continue;
+        String[] parts = dirPath.split("/");
+        StringBuilder currentPath = new StringBuilder();
+
+        for (String part : parts) {
+            if (!part.isEmpty()) {
+                currentPath.append(part).append("/");
+                String dir = currentPath.toString();
+
+                if (createdDirectories.add(dir)) {
+                    try {
+                        BlobInfo blobInfo = BlobInfo.newBuilder(blob(dir)).build();
+                        storage.create(blobInfo);
+                    } catch (StorageException e) {
+                        createdDirectories.remove(dir);
+                        log.warn("Failed to create directory: {}", dir, e);
+                    }
+                }
             }
-            BlobInfo blobInfo = BlobInfo
-                .newBuilder(this.blob(aggregatedPath.toString()))
-                .build();
-            this.storage.create(blobInfo);
         }
     }
 
