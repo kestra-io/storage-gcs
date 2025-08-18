@@ -29,6 +29,7 @@ import lombok.Builder;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.extern.jackson.Jacksonized;
+import org.apache.commons.lang3.StringUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -79,6 +80,10 @@ public class GcsStorage implements StorageInterface, GcsConfig {
         return blob(path);
     }
 
+    private BlobId blob(URI uri) {
+        return blob(getPath(uri));
+    }
+
     private BlobId blob(String path) {
         return BlobId.of(bucket, path);
     }
@@ -89,9 +94,19 @@ public class GcsStorage implements StorageInterface, GcsConfig {
     }
 
     @Override
+    public InputStream getInstanceResource(@Nullable String namespace, URI uri) throws IOException {
+        return getFromBlobId(uri, blob(uri)).inputStream();
+    }
+
+    @Override
     public StorageObject getWithMetadata(String tenantId, @Nullable String namespace, URI uri) throws IOException {
+        BlobId blobId = this.blob(tenantId, URI.create(uri.getPath()));
+        return getFromBlobId(uri, blobId);
+    }
+
+    private StorageObject getFromBlobId(URI uri, BlobId blobId) throws IOException {
         try {
-            Blob blob = this.storage.get(this.blob(tenantId, URI.create(uri.getPath())));
+            Blob blob = this.storage.get(blobId);
 
             if (blob == null) {
                 throw new FileNotFoundException(uri + " (File not found)");
@@ -128,6 +143,24 @@ public class GcsStorage implements StorageInterface, GcsConfig {
         return list;
     }
 
+    @Override
+    public List<FileAttributes> listInstanceResource(@Nullable String namespace, URI uri) throws IOException {
+        String path = getPath(uri);
+        String prefix = (path.endsWith("/")) ? path : path + "/";
+        //in case uri is null, we need to search in the root ("")
+        prefix = prefix.equals("/") ? "" : prefix;
+
+
+        List<FileAttributes> list = blobsForPrefix(prefix, false, true)
+            .map(throwFunction(this::getGcsFileAttributes))
+            .toList();
+        if(list.isEmpty()) {
+            // this will throw FileNotFound if there is no directory
+            this.getAttributes(uri, path);
+        }
+        return list;
+    }
+
     private Stream<Blob> blobsForPrefix(String prefix, boolean recursive, boolean includeDirectories) {
         Storage.BlobListOption[] blobListOptions = Stream.concat(
             Stream.of(Storage.BlobListOption.prefix(prefix)),
@@ -148,8 +181,13 @@ public class GcsStorage implements StorageInterface, GcsConfig {
 
     @Override
     public boolean exists(String tenantId, @Nullable String namespace, URI uri) {
+        BlobId blobId = this.blob(tenantId, URI.create(uri.getPath()));
+        return exists(blobId);
+    }
+
+    private boolean exists(BlobId blobId) {
         try {
-            Blob blob = this.storage.get(this.blob(tenantId, URI.create(uri.getPath())));
+            Blob blob = this.storage.get(blobId);
             return blob != null && blob.exists();
         } catch (StorageException e) {
             return false;
@@ -162,6 +200,19 @@ public class GcsStorage implements StorageInterface, GcsConfig {
         if (!exists(tenantId, namespace, uri)) {
             path = path + "/";
         }
+        return getAttributes(uri, path);
+    }
+
+    @Override
+    public FileAttributes getInstanceAttributes(@Nullable String namespace, URI uri) throws IOException {
+        String path = getPath(uri);
+        if (!exists(this.blob(uri))) {
+            path = path + "/";
+        }
+        return getAttributes(uri, path);
+    }
+
+    private FileAttributes getAttributes(URI uri, String path) throws FileNotFoundException {
         Blob blob = this.storage.get(this.blob(path));
         if (blob == null) {
             throw new FileNotFoundException("%s not found.".formatted(uri));
@@ -181,17 +232,30 @@ public class GcsStorage implements StorageInterface, GcsConfig {
 
     @Override
     public URI put(String tenantId, @Nullable String namespace, URI uri, StorageObject storageObject) throws IOException {
+        String path = getPath(tenantId, uri);
+        BlobInfo blobInfo = BlobInfo
+            .newBuilder(this.blob(tenantId, uri))
+            .setMetadata(storageObject.metadata())
+            .build();
+        return put(uri, storageObject, path, blobInfo);
+    }
+
+    @Override
+    public URI putInstanceResource(@Nullable String namespace, URI uri, StorageObject storageObject) throws IOException {
+        String path = getPath(uri);
+        BlobInfo blobInfo = BlobInfo
+            .newBuilder(this.blob(uri))
+            .setMetadata(storageObject.metadata())
+            .build();
+        return put(uri, storageObject, path, blobInfo);
+    }
+
+    private URI put(URI uri, StorageObject storageObject, String path, BlobInfo blobInfo)
+        throws IOException {
         try {
-            String path = getPath(tenantId, uri);
             mkdirs(path);
-
-            BlobInfo blobInfo = BlobInfo
-                .newBuilder(this.blob(tenantId, uri))
-                .setMetadata(storageObject.metadata())
-                .build();
-
             try (WriteChannel writer = this.storage.writer(blobInfo);
-                 InputStream data = storageObject.inputStream()) {
+                InputStream data = storageObject.inputStream()) {
                 byte[] buffer = new byte[10_240];
 
                 int limit;
@@ -254,8 +318,36 @@ public class GcsStorage implements StorageInterface, GcsConfig {
     }
 
     @Override
+    public boolean deleteInstanceResource(@Nullable String namespace, URI uri) throws IOException {
+        FileAttributes fileAttributes;
+        try {
+            fileAttributes = getInstanceAttributes(namespace, uri);
+        } catch (FileNotFoundException e) {
+            return false;
+        }
+
+
+        if (fileAttributes.getType() == FileAttributes.FileType.Directory) {
+            return !this.deleteByPrefix(
+                uri.getPath().endsWith("/") ? uri : URI.create(uri.getPath() + "/")
+            ).isEmpty();
+        }
+
+        return this.storage.delete(this.blob(uri));
+    }
+
+    @Override
     public URI createDirectory(String tenantId, @Nullable String namespace, URI uri) {
         String path = getPath(tenantId, uri);
+        return createDirectory(uri, path);
+    }
+
+    @Override
+    public URI createInstanceDirectory(String namespace, URI uri) throws IOException {
+        return createDirectory(uri, getPath(uri));
+    }
+
+    private URI createDirectory(URI uri, String path) {
         if (!path.endsWith("/")) {
             path = path + "/";
         }
@@ -307,28 +399,52 @@ public class GcsStorage implements StorageInterface, GcsConfig {
                 results.put(URI.create("kestra://" + blob.getBlobId().getName().replace(tenantId, "").replaceAll("/$", "")), batch.delete(blob.getBlobId()));
             }
 
-            if (results.isEmpty()) {
-                return List.of();
-            }
-
-            batch.submit();
-
-            if (!results.entrySet().stream().allMatch(r -> r.getValue() != null && r.getValue().get())) {
-                throw new IOException("Unable to delete all files, failed on [" +
-                    results
-                        .entrySet()
-                        .stream()
-                        .filter(r -> r.getValue() == null || !r.getValue().get())
-                        .map(r -> r.getKey().getPath())
-                        .collect(Collectors.joining(", ")) +
-                    "]");
-            }
-
-            return new ArrayList<>(results.keySet());
+            return bulkDelete(results, batch);
         } catch (StorageException e) {
             throw new IOException(e);
         }
     }
+
+    private List<URI> deleteByPrefix(URI storagePrefix) throws IOException {
+        try {
+            StorageBatch batch = this.storage.batch();
+            Map<URI, StorageBatchResult<Boolean>> results = new HashMap<>();
+
+            String prefix = getPath(storagePrefix);
+
+            Page<Blob> blobs = this.storage.list(bucket, Storage.BlobListOption.prefix(prefix));
+
+            for (Blob blob : blobs.iterateAll()) {
+                results.put(URI.create("kestra://" + blob.getBlobId().getName().replaceAll("/$", "")), batch.delete(blob.getBlobId()));
+            }
+
+            return bulkDelete(results, batch);
+        } catch (StorageException e) {
+            throw new IOException(e);
+        }
+    }
+
+    private static List<URI> bulkDelete(Map<URI, StorageBatchResult<Boolean>> results, StorageBatch batch) throws IOException {
+        if (results.isEmpty()) {
+            return List.of();
+        }
+
+        batch.submit();
+
+        if (!results.entrySet().stream().allMatch(r -> r.getValue() != null && r.getValue().get())) {
+            throw new IOException("Unable to delete all files, failed on [" +
+                results
+                    .entrySet()
+                    .stream()
+                    .filter(r -> r.getValue() == null || !r.getValue().get())
+                    .map(r -> r.getKey().getPath())
+                    .collect(Collectors.joining(", ")) +
+                "]");
+        }
+
+        return new ArrayList<>(results.keySet());
+    }
+
     private static URI createUri(String key) {
         return URI.create("kestra://%s".formatted(key));
     }
