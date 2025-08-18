@@ -185,6 +185,12 @@ public class GcsStorage implements StorageInterface, GcsConfig {
         return exists(blobId);
     }
 
+    @Override
+    public boolean existsInstanceResource(@Nullable String namespace, URI uri) {
+        BlobId blobId = this.blob(URI.create(uri.getPath()));
+        return exists(blobId);
+    }
+
     private boolean exists(BlobId blobId) {
         try {
             Blob blob = this.storage.get(blobId);
