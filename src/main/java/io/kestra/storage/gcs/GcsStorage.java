@@ -67,7 +67,7 @@ public class GcsStorage implements StorageInterface, GcsConfig {
             try {
                 this.storage.close();
             } catch (Exception e) {
-               log.warn("Failed to close GcsStorage", e);
+                log.warn("Failed to close GcsStorage", e);
             }
         }
     }
@@ -321,7 +321,7 @@ public class GcsStorage implements StorageInterface, GcsConfig {
                 .list(bucket, Storage.BlobListOption.prefix(prefix));
 
             for (Blob blob : blobs.iterateAll()) {
-                results.put(URI.create("kestra://" + blob.getBlobId().getName().replace(tenantId + "/", "").replaceAll("/$", "")), batch.delete(blob.getBlobId()));
+                results.put(URI.create("kestra://" + withoutTenant(tenantId, blob.getBlobId().getName()).replaceAll("/$", "")), batch.delete(blob.getBlobId()));
             }
 
             if (results.isEmpty()) {
@@ -346,6 +346,12 @@ public class GcsStorage implements StorageInterface, GcsConfig {
             throw new IOException(e);
         }
     }
+
+    private static String withoutTenant(String tenantId, String blobName) {
+        String result = blobName.replaceFirst(Optional.ofNullable(tenantId).orElse(""), "");
+        return result.startsWith("//") ? result.substring(1) : result;
+    }
+
     private static URI createUri(String key) {
         return URI.create("kestra://%s".formatted(key));
     }
