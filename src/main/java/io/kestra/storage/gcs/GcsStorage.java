@@ -29,7 +29,6 @@ import lombok.Builder;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.extern.jackson.Jacksonized;
-import org.apache.commons.lang3.StringUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -349,7 +348,7 @@ public class GcsStorage implements StorageInterface, GcsConfig {
     }
 
     @Override
-    public URI createInstanceDirectory(String namespace, URI uri) throws IOException {
+    public URI createInstanceDirectory(String namespace, URI uri) {
         return createDirectory(uri, getPath(uri));
     }
 
@@ -402,7 +401,7 @@ public class GcsStorage implements StorageInterface, GcsConfig {
                 .list(bucket, Storage.BlobListOption.prefix(prefix));
 
             for (Blob blob : blobs.iterateAll()) {
-                results.put(URI.create("kestra://" + blob.getBlobId().getName().replace(tenantId, "").replaceAll("/$", "")), batch.delete(blob.getBlobId()));
+                results.put(URI.create("kestra://" + blob.getBlobId().getName().replaceFirst(tenantId, "").replaceAll("/$", "")), batch.delete(blob.getBlobId()));
             }
 
             return bulkDelete(results, batch);
