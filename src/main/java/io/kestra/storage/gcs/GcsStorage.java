@@ -67,7 +67,7 @@ public class GcsStorage implements StorageInterface, GcsConfig {
             try {
                 this.storage.close();
             } catch (Exception e) {
-               log.warn("Failed to close GcsStorage", e);
+                log.warn("Failed to close GcsStorage", e);
             }
         }
     }
@@ -304,7 +304,7 @@ public class GcsStorage implements StorageInterface, GcsConfig {
                 .list(bucket, Storage.BlobListOption.prefix(prefix));
 
             for (Blob blob : blobs.iterateAll()) {
-                results.put(URI.create("kestra://" + blob.getBlobId().getName().replace(tenantId, "").replaceAll("/$", "")), batch.delete(blob.getBlobId()));
+                results.put(URI.create("kestra://" + blob.getBlobId().getName().replaceFirst(tenantId, "").replaceAll("/$", "")), batch.delete(blob.getBlobId()));
             }
 
             if (results.isEmpty()) {
