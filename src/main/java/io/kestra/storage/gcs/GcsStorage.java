@@ -1,12 +1,5 @@
 package io.kestra.storage.gcs;
 
-import com.google.api.gax.paging.Page;
-import com.google.cloud.WriteChannel;
-import com.google.cloud.storage.*;
-import io.kestra.core.models.annotations.Plugin;
-import io.kestra.core.storages.FileAttributes;
-import io.kestra.core.storages.StorageInterface;
-
 import java.io.File;
 import java.io.FileNotFoundException;
 import java.io.IOException;
@@ -21,7 +14,18 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
+import com.google.api.gax.paging.Page;
+import com.google.cloud.WriteChannel;
+import com.google.cloud.storage.*;
+
+import io.kestra.core.models.annotations.Plugin;
+import io.kestra.core.storages.FileAttributes;
+import io.kestra.core.storages.StorageInterface;
 import io.kestra.core.storages.StorageObject;
+
 import jakarta.annotation.Nullable;
 import lombok.AccessLevel;
 import lombok.AllArgsConstructor;
@@ -29,9 +33,6 @@ import lombok.Builder;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.extern.jackson.Jacksonized;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-
 
 import static io.kestra.core.utils.Rethrow.throwFunction;
 
@@ -135,7 +136,7 @@ public class GcsStorage implements StorageInterface, GcsConfig {
         List<FileAttributes> list = blobsForPrefix(prefix, false, true)
             .map(throwFunction(this::getGcsFileAttributes))
             .toList();
-        if(list.isEmpty()) {
+        if (list.isEmpty()) {
             // this will throw FileNotFound if there is no directory
             this.getAttributes(tenantId, namespace, uri);
         }
@@ -149,11 +150,10 @@ public class GcsStorage implements StorageInterface, GcsConfig {
         //in case uri is null, we need to search in the root ("")
         prefix = prefix.equals("/") ? "" : prefix;
 
-
         List<FileAttributes> list = blobsForPrefix(prefix, false, true)
             .map(throwFunction(this::getGcsFileAttributes))
             .toList();
-        if(list.isEmpty()) {
+        if (list.isEmpty()) {
             // this will throw FileNotFound if there is no directory
             this.getAttributes(uri, path);
         }
@@ -167,7 +167,8 @@ public class GcsStorage implements StorageInterface, GcsConfig {
         ).toArray(Storage.BlobListOption[]::new);
         Page<Blob> blobs = this.storage.list(bucket, blobListOptions);
         return blobs.streamAll()
-            .filter(blob -> {
+            .filter(blob ->
+            {
                 String key = blob.getName().substring(prefix.length());
                 // Remove recursive result and requested dir
                 return !key.isEmpty()
@@ -259,8 +260,10 @@ public class GcsStorage implements StorageInterface, GcsConfig {
         throws IOException {
         try {
             mkdirs(path);
-            try (WriteChannel writer = this.storage.writer(blobInfo);
-                InputStream data = storageObject.inputStream()) {
+            try (
+                WriteChannel writer = this.storage.writer(blobInfo);
+                InputStream data = storageObject.inputStream()
+            ) {
                 byte[] buffer = new byte[10_240];
 
                 int limit;
@@ -276,7 +279,8 @@ public class GcsStorage implements StorageInterface, GcsConfig {
     }
 
     private void mkdirs(String path) {
-        if (path == null || path.isEmpty()) return;
+        if (path == null || path.isEmpty())
+            return;
 
         String dirPath = path.endsWith("/") ? path : path.substring(0, path.lastIndexOf('/') + 1);
 
@@ -310,7 +314,6 @@ public class GcsStorage implements StorageInterface, GcsConfig {
             return false;
         }
 
-
         if (fileAttributes.getType() == FileAttributes.FileType.Directory) {
             return !this.deleteByPrefix(
                 tenantId,
@@ -330,7 +333,6 @@ public class GcsStorage implements StorageInterface, GcsConfig {
         } catch (FileNotFoundException e) {
             return false;
         }
-
 
         if (fileAttributes.getType() == FileAttributes.FileType.Directory) {
             return !this.deleteByPrefix(
@@ -375,7 +377,8 @@ public class GcsStorage implements StorageInterface, GcsConfig {
             String prefix = (!path.endsWith("/")) ? path + "/" : path;
 
             Page<Blob> list = this.storage.list(bucket, Storage.BlobListOption.prefix(prefix));
-            list.streamAll().forEach(blob -> {
+            list.streamAll().forEach(blob ->
+            {
                 BlobId target = blob(getPath(tenantId, to) + "/" + blob.getName().substring(prefix.length()));
                 moveFile(blob.getBlobId(), target, batch);
             });
@@ -437,14 +440,17 @@ public class GcsStorage implements StorageInterface, GcsConfig {
         batch.submit();
 
         if (!results.entrySet().stream().allMatch(r -> r.getValue() != null && r.getValue().get())) {
-            throw new IOException("Unable to delete all files, failed on [" +
-                results
-                    .entrySet()
-                    .stream()
-                    .filter(r -> r.getValue() == null || !r.getValue().get())
-                    .map(r -> r.getKey().getPath())
-                    .collect(Collectors.joining(", ")) +
-                "]");
+            throw new IOException(
+                "Unable to delete all files, failed on [" +
+                    results
+                        .entrySet()
+                        .stream()
+                        .filter(r -> r.getValue() == null || !r.getValue().get())
+                        .map(r -> r.getKey().getPath())
+                        .collect(Collectors.joining(", "))
+                    +
+                    "]"
+            );
         }
 
         return new ArrayList<>(results.keySet());

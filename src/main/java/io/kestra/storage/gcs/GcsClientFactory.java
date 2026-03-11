@@ -1,12 +1,13 @@
 package io.kestra.storage.gcs;
 
+import java.io.ByteArrayInputStream;
+
 import com.google.auth.oauth2.GoogleCredentials;
 import com.google.auth.oauth2.ServiceAccountCredentials;
 import com.google.cloud.storage.Storage;
 import com.google.cloud.storage.StorageOptions;
-import lombok.SneakyThrows;
 
-import java.io.ByteArrayInputStream;
+import lombok.SneakyThrows;
 
 public class GcsClientFactory {
     @SneakyThrows
