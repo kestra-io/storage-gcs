@@ -1,6 +1,9 @@
 kestra:
+  queue:
+    type: memory
+  repository:
+    type: memory
   storage:
     type: gcs
     gcs:
       bucket: "kestra-unit-test"
-
