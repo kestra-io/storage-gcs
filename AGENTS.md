@@ -2,11 +2,13 @@
 
 ## What
 
-description = 'Google Cloud Storage storage plugin for Kestra
+- Implements the storage backend under `io.kestra.storage.gcs`.
+- Includes classes such as `GcsClientFactory`, `GcsConfig`, `GcsFileAttributes`, `GcsStorage`.
 
 ## Why
 
-Enables Kestra to use Google Cloud Storage as its internal storage backend for persisting flow execution data, logs, and artifacts.
+- This repository implements a Kestra storage backend for storage plugin for Google Cloud Storage (GCS).
+- It stores namespace files and internal execution artifacts outside local disk.
 
 ## How
 
@@ -24,24 +26,11 @@ storage-gcs/
 └── README.md
 ```
 
-### Important Commands
+## Local rules
 
-```bash
-# Build the plugin
-./gradlew shadowJar
+- Keep the scope on Kestra internal storage behavior, not workflow task semantics.
 
-# Run tests
-./gradlew test
+## References
 
-# Build without tests
-./gradlew shadowJar -x test
-```
-
-### Configuration
-
-All tasks and triggers accept standard Kestra plugin properties. Credentials should use
-`{{ secret('SECRET_NAME') }}` — never hardcode real values.
-
-## Agents
-
-**IMPORTANT:** This is a Kestra plugin repository (prefixed by `plugin-`, `storage-`, or `secret-`). You **MUST** delegate all coding tasks to the `kestra-plugin-developer` agent. Do NOT implement code changes directly — always use this agent.
+- https://kestra.io/docs/plugin-developer-guide
+- https://kestra.io/docs/plugin-developer-guide/contribution-guidelines
