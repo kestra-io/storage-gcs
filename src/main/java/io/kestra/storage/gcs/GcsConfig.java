@@ -17,6 +17,13 @@ public interface GcsConfig {
     String getBucket();
 
     @Schema(
+        title = "Object path prefix within the GCS bucket to store data.",
+        description = "If set, all objects will be stored under this prefix (e.g. `bucket/path/`)."
+    )
+    @PluginProperty
+    String getPath();
+
+    @Schema(
         title = "The GCS service account key, as a JSON string.",
         description = "If not provided, the default credentials will be used."
     )
