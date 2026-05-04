@@ -50,6 +50,8 @@ public class GcsStorage implements StorageInterface, GcsConfig {
 
     private String bucket;
 
+    private String path;
+
     private String serviceAccount;
 
     private String projectId;
@@ -73,6 +75,15 @@ public class GcsStorage implements StorageInterface, GcsConfig {
                 log.warn("Failed to close GcsStorage", e);
             }
         }
+    }
+
+    @Override
+    public String getPath(String tenantId, URI uri) {
+        String basePath = StorageInterface.super.getPath(tenantId, uri);
+        if (path == null) {
+            return basePath;
+        }
+        return path + (path.endsWith("/") ? basePath : "/" + basePath);
     }
 
     private BlobId blob(String tenantId, URI uri) {
