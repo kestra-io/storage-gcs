@@ -95,6 +95,7 @@ dependencies {
 
     testImplementation group: "io.kestra", name: "core", version: kestraVersion
     testImplementation group: "io.kestra", name: "tests", version: kestraVersion
+    testImplementation group: "io.kestra", name: "repository-memory", version: kestraVersion
     testAnnotationProcessor group: "io.kestra", name: "processor", version: kestraVersion
 }
 
