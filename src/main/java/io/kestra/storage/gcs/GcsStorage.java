@@ -9,6 +9,8 @@ import java.nio.ByteBuffer;
 import java.nio.channels.Channels;
 import java.nio.channels.ReadableByteChannel;
 import java.nio.file.Path;
+import java.time.Instant;
+import java.time.OffsetDateTime;
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.stream.Collectors;
@@ -47,6 +49,9 @@ public class GcsStorage implements StorageInterface, GcsConfig {
     private final Set<String> createdDirectories = ConcurrentHashMap.newKeySet();
 
     private static final Logger log = LoggerFactory.getLogger(GcsStorage.class);
+
+    // GCS batch requests are limited to 100 operations per submit call.
+    private static final int BATCH_DELETE_LIMIT = 100;
 
     private String bucket;
 
@@ -401,6 +406,73 @@ public class GcsStorage implements StorageInterface, GcsConfig {
     private void moveFile(BlobId source, BlobId target, StorageBatch batch) {
         this.storage.copy(Storage.CopyRequest.newBuilder().setSource(source).setTarget(target).build());
         batch.delete(source);
+    }
+
+    @Override
+    public List<URI> purgeByLastModified(
+        String tenantId,
+        @Nullable String namespace,
+        URI prefix,
+        @Nullable Instant startDate,
+        @Nullable Instant endDate,
+        boolean dryRun
+    ) throws IOException {
+        try {
+            var path = getPath(tenantId, prefix);
+            Page<Blob> page = storage.list(bucket, Storage.BlobListOption.prefix(path));
+
+            var matched = new ArrayList<URI>();
+            var chunk = new ArrayList<BlobId>(BATCH_DELETE_LIMIT);
+
+            for (var blob : page.iterateAll()) {
+                if (blob.getName().endsWith("/")) {
+                    continue;
+                }
+                var updateTime = blob.getUpdateTimeOffsetDateTime();
+                if (isInWindow(updateTime, startDate, endDate)) {
+                    matched.add(URI.create("kestra://" + prefix.getPath() + blob.getName().substring(path.length())));
+                    if (!dryRun) {
+                        chunk.add(blob.getBlobId());
+                        if (chunk.size() == BATCH_DELETE_LIMIT) {
+                            batchDelete(chunk);
+                            chunk.clear();
+                        }
+                    }
+                }
+            }
+
+            if (!chunk.isEmpty()) {
+                batchDelete(chunk);
+            }
+
+            return matched;
+        } catch (StorageException e) {
+            throw new IOException(e);
+        }
+    }
+
+    private static boolean isInWindow(OffsetDateTime updateTime, Instant startDate, Instant endDate) {
+        if (updateTime == null) {
+            return false;
+        }
+        var instant = updateTime.toInstant();
+        if (startDate != null && instant.isBefore(startDate)) {
+            return false;
+        }
+        if (endDate != null && instant.isAfter(endDate)) {
+            return false;
+        }
+        return true;
+    }
+
+    private void batchDelete(List<BlobId> blobIds) throws IOException {
+        var batch = storage.batch();
+        var results = new LinkedHashMap<URI, StorageBatchResult<Boolean>>();
+        for (var blobId : blobIds) {
+            var uri = URI.create("kestra://" + blobId.getName());
+            results.put(uri, batch.delete(blobId));
+        }
+        bulkDelete(results, batch);
     }
 
     @Override
