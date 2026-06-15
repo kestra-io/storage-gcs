@@ -15,11 +15,6 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class GcsStorageTest extends StorageTestSuite {
 
-    /**
-     * Regression test for Bug 2: directory markers removed by deleteByPrefix must not be
-     * served from the stale in-memory cache on the next put, causing getAttributes to report
-     * the directory as absent even though objects exist underneath.
-     */
     @Test
     void directoryMarkerRecreatedAfterDeleteByPrefix() throws Exception {
         var tenantId = IdUtils.create();
