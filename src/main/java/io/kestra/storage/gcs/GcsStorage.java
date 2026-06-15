@@ -12,7 +12,6 @@ import java.nio.file.Path;
 import java.time.Instant;
 import java.time.OffsetDateTime;
 import java.util.*;
-import java.util.concurrent.ConcurrentHashMap;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
@@ -46,8 +45,6 @@ import static io.kestra.core.utils.Rethrow.throwFunction;
 @Plugin
 @Plugin.Id("gcs")
 public class GcsStorage implements StorageInterface, GcsConfig {
-    private final Set<String> createdDirectories = ConcurrentHashMap.newKeySet();
-
     private static final Logger log = LoggerFactory.getLogger(GcsStorage.class);
 
     // GCS batch requests are limited to 100 operations per submit call.
@@ -308,12 +305,11 @@ public class GcsStorage implements StorageInterface, GcsConfig {
                 currentPath.append(part).append("/");
                 String dir = currentPath.toString();
 
-                if (createdDirectories.add(dir)) {
+                if (!exists(blob(dir))) {
                     try {
                         BlobInfo blobInfo = BlobInfo.newBuilder(blob(dir)).build();
                         storage.create(blobInfo);
                     } catch (StorageException e) {
-                        createdDirectories.remove(dir);
                         log.warn("Failed to create directory: {}", dir, e);
                     }
                 }
