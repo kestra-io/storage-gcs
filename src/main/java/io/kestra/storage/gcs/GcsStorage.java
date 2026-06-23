@@ -9,6 +9,8 @@ import java.nio.ByteBuffer;
 import java.nio.channels.Channels;
 import java.nio.channels.ReadableByteChannel;
 import java.nio.file.Path;
+import java.time.Instant;
+import java.time.OffsetDateTime;
 import java.util.*;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
@@ -44,6 +46,15 @@ import static io.kestra.core.utils.Rethrow.throwFunction;
 @Plugin.Id("gcs")
 public class GcsStorage implements StorageInterface, GcsConfig {
     private static final Logger log = LoggerFactory.getLogger(GcsStorage.class);
+
+    // GCS batch requests are limited to 100 operations per submit call.
+    private static final int BATCH_DELETE_LIMIT = 100;
+
+    // The GCS JSON batch endpoint intermittently returns transient "server(s) are not
+    // responding" errors that the client does not retry on its own. Re-submit a fresh
+    // batch with a short backoff to absorb those before failing.
+    private static final int BATCH_SUBMIT_MAX_ATTEMPTS = 3;
+    private static final long BATCH_SUBMIT_RETRY_BACKOFF_MS = 500;
 
     private String bucket;
 
@@ -372,13 +383,13 @@ public class GcsStorage implements StorageInterface, GcsConfig {
     @Override
     public URI move(String tenantId, @Nullable String namespace, URI from, URI to) throws IOException {
         String path = getPath(tenantId, from);
-        StorageBatch batch = this.storage.batch();
+        Map<URI, BlobId> toDelete = new LinkedHashMap<>();
 
         if (getAttributes(tenantId, namespace, from).getType() == FileAttributes.FileType.File) {
             // move just a file
             BlobId source = blob(path);
             BlobId target = blob(tenantId, to);
-            moveFile(source, target, batch);
+            copyForMove(source, target, toDelete);
         } else {
             // move directories
             String prefix = (!path.endsWith("/")) ? path + "/" : path;
@@ -387,23 +398,87 @@ public class GcsStorage implements StorageInterface, GcsConfig {
             list.streamAll().forEach(blob ->
             {
                 BlobId target = blob(getPath(tenantId, to) + "/" + blob.getName().substring(prefix.length()));
-                moveFile(blob.getBlobId(), target, batch);
+                copyForMove(blob.getBlobId(), target, toDelete);
             });
         }
-        batch.submit();
+        batchDeleteWithRetry(toDelete);
         return createUri(to.getPath());
     }
 
-    private void moveFile(BlobId source, BlobId target, StorageBatch batch) {
+    private void copyForMove(BlobId source, BlobId target, Map<URI, BlobId> toDelete) {
         this.storage.copy(Storage.CopyRequest.newBuilder().setSource(source).setTarget(target).build());
-        batch.delete(source);
+        toDelete.put(URI.create("kestra://" + source.getName()), source);
+    }
+
+    @Override
+    public List<URI> purgeByLastModified(
+        String tenantId,
+        @Nullable String namespace,
+        URI prefix,
+        @Nullable Instant startDate,
+        @Nullable Instant endDate,
+        boolean dryRun
+    ) throws IOException {
+        try {
+            var path = getPath(tenantId, prefix);
+            Page<Blob> page = storage.list(bucket, Storage.BlobListOption.prefix(path));
+
+            var matched = new ArrayList<URI>();
+            var chunk = new ArrayList<BlobId>(BATCH_DELETE_LIMIT);
+
+            for (var blob : page.iterateAll()) {
+                if (blob.getName().endsWith("/")) {
+                    continue;
+                }
+                var updateTime = blob.getUpdateTimeOffsetDateTime();
+                if (isInWindow(updateTime, startDate, endDate)) {
+                    matched.add(URI.create("kestra://" + prefix.getPath() + blob.getName().substring(path.length())));
+                    if (!dryRun) {
+                        chunk.add(blob.getBlobId());
+                        if (chunk.size() == BATCH_DELETE_LIMIT) {
+                            batchDelete(chunk);
+                            chunk.clear();
+                        }
+                    }
+                }
+            }
+
+            if (!chunk.isEmpty()) {
+                batchDelete(chunk);
+            }
+
+            return matched;
+        } catch (StorageException e) {
+            throw new IOException(e);
+        }
+    }
+
+    private static boolean isInWindow(OffsetDateTime updateTime, Instant startDate, Instant endDate) {
+        if (updateTime == null) {
+            return false;
+        }
+        var instant = updateTime.toInstant();
+        if (startDate != null && instant.isBefore(startDate)) {
+            return false;
+        }
+        if (endDate != null && instant.isAfter(endDate)) {
+            return false;
+        }
+        return true;
+    }
+
+    private void batchDelete(List<BlobId> blobIds) throws IOException {
+        var toDelete = new LinkedHashMap<URI, BlobId>();
+        for (var blobId : blobIds) {
+            toDelete.put(URI.create("kestra://" + blobId.getName()), blobId);
+        }
+        bulkDelete(toDelete);
     }
 
     @Override
     public List<URI> deleteByPrefix(String tenantId, @Nullable String namespace, URI storagePrefix) throws IOException {
         try {
-            StorageBatch batch = this.storage.batch();
-            Map<URI, StorageBatchResult<Boolean>> results = new HashMap<>();
+            Map<URI, BlobId> toDelete = new LinkedHashMap<>();
 
             String prefix = getPath(tenantId, storagePrefix);
 
@@ -411,10 +486,11 @@ public class GcsStorage implements StorageInterface, GcsConfig {
                 .list(bucket, Storage.BlobListOption.prefix(prefix));
 
             for (Blob blob : blobs.iterateAll()) {
-                results.put(URI.create("kestra://" + blob.getBlobId().getName().replaceFirst(tenantId, "").replaceAll("/$", "")), batch.delete(blob.getBlobId()));
+                BlobId blobId = blob.getBlobId();
+                toDelete.put(URI.create("kestra://" + blobId.getName().replaceFirst(tenantId, "").replaceAll("/$", "")), blobId);
             }
 
-            return bulkDelete(results, batch);
+            return bulkDelete(toDelete);
         } catch (StorageException e) {
             throw new IOException(e);
         }
@@ -422,45 +498,87 @@ public class GcsStorage implements StorageInterface, GcsConfig {
 
     private List<URI> deleteByPrefix(URI storagePrefix) throws IOException {
         try {
-            StorageBatch batch = this.storage.batch();
-            Map<URI, StorageBatchResult<Boolean>> results = new HashMap<>();
+            Map<URI, BlobId> toDelete = new LinkedHashMap<>();
 
             String prefix = getPath(storagePrefix);
 
             Page<Blob> blobs = this.storage.list(bucket, Storage.BlobListOption.prefix(prefix));
 
             for (Blob blob : blobs.iterateAll()) {
-                results.put(URI.create("kestra://" + blob.getBlobId().getName().replaceAll("/$", "")), batch.delete(blob.getBlobId()));
+                BlobId blobId = blob.getBlobId();
+                toDelete.put(URI.create("kestra://" + blobId.getName().replaceAll("/$", "")), blobId);
             }
 
-            return bulkDelete(results, batch);
+            return bulkDelete(toDelete);
         } catch (StorageException e) {
             throw new IOException(e);
         }
     }
 
-    private static List<URI> bulkDelete(Map<URI, StorageBatchResult<Boolean>> results, StorageBatch batch) throws IOException {
-        if (results.isEmpty()) {
+    private List<URI> bulkDelete(Map<URI, BlobId> toDelete) throws IOException {
+        if (toDelete.isEmpty()) {
             return List.of();
         }
 
-        batch.submit();
+        Map<URI, Boolean> results = batchDeleteWithRetry(toDelete);
 
-        if (!results.entrySet().stream().allMatch(r -> r.getValue() != null && r.getValue().get())) {
+        List<URI> failed = results.entrySet().stream()
+            .filter(e -> !Boolean.TRUE.equals(e.getValue()))
+            .map(Map.Entry::getKey)
+            .toList();
+
+        if (!failed.isEmpty()) {
             throw new IOException(
                 "Unable to delete all files, failed on [" +
-                    results
-                        .entrySet()
-                        .stream()
-                        .filter(r -> r.getValue() == null || !r.getValue().get())
-                        .map(r -> r.getKey().getPath())
-                        .collect(Collectors.joining(", "))
-                    +
+                    failed.stream().map(URI::getPath).collect(Collectors.joining(", ")) +
                     "]"
             );
         }
 
-        return new ArrayList<>(results.keySet());
+        return new ArrayList<>(toDelete.keySet());
+    }
+
+    /**
+     * Submits the given deletes as a GCS batch, rebuilding and re-submitting a fresh batch on
+     * transient {@link StorageException}s. A {@link StorageBatch} is single-use, so the batch is
+     * recreated on every attempt rather than re-submitting the same instance.
+     *
+     * @return per-URI deletion outcome ({@code true} when the object was deleted)
+     */
+    private Map<URI, Boolean> batchDeleteWithRetry(Map<URI, BlobId> toDelete) {
+        StorageException last = null;
+        for (int attempt = 1; attempt <= BATCH_SUBMIT_MAX_ATTEMPTS; attempt++) {
+            StorageBatch batch = this.storage.batch();
+            Map<URI, StorageBatchResult<Boolean>> results = new LinkedHashMap<>();
+            toDelete.forEach((uri, blobId) -> results.put(uri, batch.delete(blobId)));
+
+            try {
+                batch.submit();
+            } catch (StorageException e) {
+                last = e;
+                if (attempt < BATCH_SUBMIT_MAX_ATTEMPTS) {
+                    log.warn("GCS batch submit failed (attempt {}/{}), retrying: {}",
+                        attempt, BATCH_SUBMIT_MAX_ATTEMPTS, e.getMessage());
+                    sleepBackoff(attempt);
+                    continue;
+                }
+                throw e;
+            }
+
+            Map<URI, Boolean> outcome = new LinkedHashMap<>();
+            results.forEach((uri, result) -> outcome.put(uri, result != null && Boolean.TRUE.equals(result.get())));
+            return outcome;
+        }
+        throw last; // unreachable: the loop either returns or throws
+    }
+
+    private static void sleepBackoff(int attempt) {
+        try {
+            Thread.sleep(BATCH_SUBMIT_RETRY_BACKOFF_MS * attempt);
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            throw new StorageException(0, "Interrupted while retrying GCS batch submit", e);
+        }
     }
 
     private static URI createUri(String key) {
