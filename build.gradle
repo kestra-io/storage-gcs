@@ -62,14 +62,6 @@ dependencies {
 /**********************************************************************************************************************\
  * Test
  **********************************************************************************************************************/
-
-// Force OTel SDK to align with opentelemetry-sdk-extension-autoconfigure managed by the Kestra platform BOM.
-// The Google Cloud Storage dependency pulls in opentelemetry-sdk-metrics:1.57.0, which removed the
-// internal ExemplarFilter class that autoconfigure:1.54.1 references at runtime.
-configurations.all {
-    resolutionStrategy.force "io.opentelemetry:opentelemetry-sdk-metrics:1.54.1"
-}
-
 test {
     useJUnitPlatform()
 }
@@ -103,8 +95,6 @@ dependencies {
 
     testImplementation group: "io.kestra", name: "core", version: kestraVersion
     testImplementation group: "io.kestra", name: "tests", version: kestraVersion
-    testImplementation group: "io.kestra", name: "repository-memory", version: kestraVersion
-    testImplementation group: "io.kestra", name: "jdbc-h2", version: kestraVersion
     testAnnotationProcessor group: "io.kestra", name: "processor", version: kestraVersion
 }
 
@@ -113,7 +103,7 @@ dependencies {
  **********************************************************************************************************************/
 dependencies {
     testImplementation enforcedPlatform("io.kestra:platform:$kestraVersion")
-    testImplementation "io.qameta.allure:allure-junit5:2.29.1"
+    testImplementation "io.qameta.allure:allure-junit5"
 }
 
 configurations {
