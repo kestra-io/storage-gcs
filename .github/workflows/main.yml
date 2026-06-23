@@ -46,6 +46,5 @@ jobs:
     with:
       skip-test: ${{ github.event.inputs.skip-test == 'true' }}
       kestra-version: ${{ github.event.inputs.kestra-version }}
-      # Kestra 1.3.x core requires JVM 21 (see kestraVersion in gradle.properties)
       java-version: '21'
     secrets: inherit
