@@ -23,6 +23,7 @@ import com.google.cloud.WriteChannel;
 import com.google.cloud.storage.*;
 
 import io.kestra.core.models.annotations.Plugin;
+import io.kestra.core.models.annotations.PluginProperty;
 import io.kestra.core.storages.FileAttributes;
 import io.kestra.core.storages.StorageInterface;
 import io.kestra.core.storages.StorageObject;
@@ -60,6 +61,7 @@ public class GcsStorage implements StorageInterface, GcsConfig {
 
     private String path;
 
+    @PluginProperty(secret = true)
     private String serviceAccount;
 
     private String projectId;
