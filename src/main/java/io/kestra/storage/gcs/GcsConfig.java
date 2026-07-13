@@ -27,7 +27,7 @@ public interface GcsConfig {
         title = "The GCS service account key, as a JSON string.",
         description = "If not provided, the default credentials will be used."
     )
-    @PluginProperty
+    @PluginProperty(secret = true)
     String getServiceAccount();
 
     @Schema(
