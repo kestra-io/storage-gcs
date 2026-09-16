@@ -5,6 +5,7 @@ import java.io.FileNotFoundException;
 import java.io.IOException;
 import java.io.InputStream;
 import java.net.URI;
+import java.net.URISyntaxException;
 import java.nio.ByteBuffer;
 import java.nio.channels.Channels;
 import java.nio.channels.ReadableByteChannel;
@@ -121,7 +122,7 @@ public class GcsStorage implements StorageInterface, GcsConfig {
 
     @Override
     public StorageObject getWithMetadata(String tenantId, @Nullable String namespace, URI uri) throws IOException {
-        BlobId blobId = this.blob(tenantId, URI.create(uri.getPath()));
+        BlobId blobId = this.blob(tenantId, pathUri(uri.getPath()));
         return getFromBlobId(uri, blobId);
     }
 
@@ -145,7 +146,7 @@ public class GcsStorage implements StorageInterface, GcsConfig {
         String path = getPath(tenantId, prefix);
         return blobsForPrefix(path, true, includeDirectories)
             .map(BlobInfo::getName)
-            .map(blobPath -> URI.create("kestra://" + prefix.getPath() + blobPath.substring(path.length())))
+            .map(blobPath -> createUri(prefix.getPath() + blobPath.substring(path.length())))
             .toList();
     }
 
@@ -202,13 +203,13 @@ public class GcsStorage implements StorageInterface, GcsConfig {
 
     @Override
     public boolean exists(String tenantId, @Nullable String namespace, URI uri) {
-        BlobId blobId = this.blob(tenantId, URI.create(uri.getPath()));
+        BlobId blobId = this.blob(tenantId, pathUri(uri.getPath()));
         return exists(blobId);
     }
 
     @Override
     public boolean existsInstanceResource(@Nullable String namespace, URI uri) {
-        BlobId blobId = this.blob(URI.create(uri.getPath()));
+        BlobId blobId = this.blob(pathUri(uri.getPath()));
         return exists(blobId);
     }
 
@@ -293,7 +294,7 @@ public class GcsStorage implements StorageInterface, GcsConfig {
                 }
             }
 
-            return URI.create("kestra://" + uri.getPath());
+            return createUri(uri.getPath());
         } catch (StorageException e) {
             throw new IOException(e);
         }
@@ -338,7 +339,7 @@ public class GcsStorage implements StorageInterface, GcsConfig {
             return !this.deleteByPrefix(
                 tenantId,
                 namespace,
-                uri.getPath().endsWith("/") ? uri : URI.create(uri.getPath() + "/")
+                uri.getPath().endsWith("/") ? uri : pathUri(uri.getPath() + "/")
             ).isEmpty();
         }
 
@@ -356,7 +357,7 @@ public class GcsStorage implements StorageInterface, GcsConfig {
 
         if (fileAttributes.getType() == FileAttributes.FileType.Directory) {
             return !this.deleteByPrefix(
-                uri.getPath().endsWith("/") ? uri : URI.create(uri.getPath() + "/")
+                uri.getPath().endsWith("/") ? uri : pathUri(uri.getPath() + "/")
             ).isEmpty();
         }
 
@@ -409,7 +410,7 @@ public class GcsStorage implements StorageInterface, GcsConfig {
 
     private void copyForMove(BlobId source, BlobId target, Map<URI, BlobId> toDelete) {
         this.storage.copy(Storage.CopyRequest.newBuilder().setSource(source).setTarget(target).build());
-        toDelete.put(URI.create("kestra://" + source.getName()), source);
+        toDelete.put(createUri(source.getName()), source);
     }
 
     @Override
@@ -434,7 +435,7 @@ public class GcsStorage implements StorageInterface, GcsConfig {
                 }
                 var updateTime = blob.getUpdateTimeOffsetDateTime();
                 if (isInWindow(updateTime, startDate, endDate)) {
-                    matched.add(URI.create("kestra://" + prefix.getPath() + blob.getName().substring(path.length())));
+                    matched.add(createUri(prefix.getPath() + blob.getName().substring(path.length())));
                     if (!dryRun) {
                         chunk.add(blob.getBlobId());
                         if (chunk.size() == BATCH_DELETE_LIMIT) {
@@ -472,7 +473,7 @@ public class GcsStorage implements StorageInterface, GcsConfig {
     private void batchDelete(List<BlobId> blobIds) throws IOException {
         var toDelete = new LinkedHashMap<URI, BlobId>();
         for (var blobId : blobIds) {
-            toDelete.put(URI.create("kestra://" + blobId.getName()), blobId);
+            toDelete.put(createUri(blobId.getName()), blobId);
         }
         bulkDelete(toDelete);
     }
@@ -489,7 +490,7 @@ public class GcsStorage implements StorageInterface, GcsConfig {
 
             for (Blob blob : blobs.iterateAll()) {
                 BlobId blobId = blob.getBlobId();
-                toDelete.put(URI.create("kestra://" + blobId.getName().replaceFirst(tenantId, "").replaceAll("/$", "")), blobId);
+                toDelete.put(createUri(blobId.getName().replaceFirst(tenantId, "").replaceAll("/$", "")), blobId);
             }
 
             return bulkDelete(toDelete);
@@ -508,7 +509,7 @@ public class GcsStorage implements StorageInterface, GcsConfig {
 
             for (Blob blob : blobs.iterateAll()) {
                 BlobId blobId = blob.getBlobId();
-                toDelete.put(URI.create("kestra://" + blobId.getName().replaceAll("/$", "")), blobId);
+                toDelete.put(createUri(blobId.getName().replaceAll("/$", "")), blobId);
             }
 
             return bulkDelete(toDelete);
@@ -584,6 +585,18 @@ public class GcsStorage implements StorageInterface, GcsConfig {
     }
 
     private static URI createUri(String key) {
-        return URI.create("kestra://%s".formatted(key));
+        try {
+            return new URI("kestra", "", key.startsWith("/") ? key : "/" + key, null, null);
+        } catch (URISyntaxException e) {
+            throw new IllegalArgumentException("Invalid Kestra storage path: " + key, e);
+        }
+    }
+
+    private static URI pathUri(String path) {
+        try {
+            return new URI(null, null, path, null);
+        } catch (URISyntaxException e) {
+            throw new IllegalArgumentException("Invalid storage path: " + path, e);
+        }
     }
 }
