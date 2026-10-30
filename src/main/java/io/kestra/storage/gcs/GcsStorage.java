@@ -29,6 +29,7 @@ import io.kestra.core.storages.FileAttributes;
 import io.kestra.core.storages.StorageInterface;
 import io.kestra.core.storages.StorageObject;
 
+import io.swagger.v3.oas.annotations.Hidden;
 import jakarta.annotation.Nullable;
 import lombok.AccessLevel;
 import lombok.AllArgsConstructor;
@@ -67,6 +68,7 @@ public class GcsStorage implements StorageInterface, GcsConfig {
 
     private String projectId;
 
+    @Hidden
     @Getter(AccessLevel.PRIVATE)
     private Storage storage;
 
