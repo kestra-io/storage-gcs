@@ -30,6 +30,7 @@ import com.google.cloud.storage.*;
 import io.kestra.core.models.annotations.Plugin;
 import io.kestra.core.models.annotations.PluginProperty;
 import io.kestra.core.storages.FileAttributes;
+import io.kestra.core.storages.PresignRequest;
 import io.kestra.core.storages.PresignableStorage;
 import io.kestra.core.storages.PresignedRequest;
 import io.kestra.core.storages.StorageInterface;
@@ -66,6 +67,7 @@ public class GcsStorage implements StorageInterface, PresignableStorage, GcsConf
     private static final long BATCH_SUBMIT_RETRY_BACKOFF_MS = 500;
 
     private static final Duration MAX_SIGNED_URL_TTL = Duration.ofDays(7);
+    private static final String CANNOT_SIGN_MESSAGE = "The GCS credentials of bucket '%s' cannot sign URLs. Configure a service account key, or grant 'iam.serviceAccounts.signBlob' to the service account of the default credentials.";
     private static final String METADATA_HEADER_PREFIX = "x-goog-meta-";
 
     private String bucket;
@@ -316,14 +318,9 @@ public class GcsStorage implements StorageInterface, PresignableStorage, GcsConf
      * permission on the service account of application default credentials such as Workload Identity.
      */
     @Override
-    public Optional<PresignedRequest> presign(
-        String tenantId,
-        @Nullable String namespace,
-        URI uri,
-        PresignedRequest.Method method,
-        Map<String, String> metadata,
-        Duration ttl) throws IOException {
-        String path = getPath(tenantId, uri);
+    public Optional<PresignedRequest> presign(PresignRequest request) throws IOException {
+        PresignedRequest.Method method = request.method();
+        String path = getPath(request.tenantId(), request.uri());
         Map<String, String> headers = new HashMap<>();
         List<Storage.SignUrlOption> options = new ArrayList<>(
             List.of(
@@ -333,21 +330,19 @@ public class GcsStorage implements StorageInterface, PresignableStorage, GcsConf
         );
         if (PresignedRequest.Method.PUT == method) {
             mkdirs(path);
-            MetadataUtils.toStoredMetadata(metadata).forEach((key, value) -> headers.put(METADATA_HEADER_PREFIX + key, value));
+            MetadataUtils.toStoredMetadata(request.metadata()).forEach((key, value) -> headers.put(METADATA_HEADER_PREFIX + key, value));
             options.add(Storage.SignUrlOption.withExtHeaders(headers));
         }
 
-        long ttlSeconds = Math.min(ttl.toSeconds(), MAX_SIGNED_URL_TTL.toSeconds());
+        long ttlSeconds = Math.min(request.ttl().toSeconds(), MAX_SIGNED_URL_TTL.toSeconds());
         try {
             URL url = this.storage.signUrl(BlobInfo.newBuilder(blob(path)).build(), ttlSeconds, TimeUnit.SECONDS, options.toArray(Storage.SignUrlOption[]::new));
-            return Optional.of(new PresignedRequest(method, url.toURI(), headers));
+            return Optional.of(PresignedRequest.builder().method(method).url(url.toURI()).headers(headers).build());
         } catch (IllegalStateException e) {
-            throw new IllegalStateException(
-                "The GCS credentials of bucket '%s' cannot sign URLs. Configure a service account key, or grant 'iam.serviceAccounts.signBlob' to the service account of the default credentials."
-                    .formatted(bucket),
-                e
-            );
-        } catch (ServiceAccountSigner.SigningException | StorageException | URISyntaxException e) {
+            throw new IllegalStateException(CANNOT_SIGN_MESSAGE.formatted(bucket), e);
+        } catch (ServiceAccountSigner.SigningException e) {
+            throw new IOException(CANNOT_SIGN_MESSAGE.formatted(bucket), e);
+        } catch (StorageException | URISyntaxException e) {
             throw new IOException(e);
         }
     }
