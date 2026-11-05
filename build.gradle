@@ -86,6 +86,7 @@ dependencies {
 
     testImplementation group: "io.kestra", name: "core", version: kestraVersion
     testImplementation group: "io.kestra", name: "tests", version: kestraVersion
+    testImplementation group: "io.kestra", name: "jdbc-h2", version: kestraVersion
     testAnnotationProcessor group: "io.kestra", name: "processor", version: kestraVersion
 }
 

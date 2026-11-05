@@ -1,12 +1,13 @@
 package io.kestra.storage.gcs;
 
 import java.util.HashMap;
+import java.util.Locale;
 import java.util.Map;
 import java.util.regex.Pattern;
 
 /**
- * Maps metadata keys to the snake case a presigned upload sends them in, since a header name reaches GCS lowercased
- * and would otherwise lose the case of a key such as {@code expirationDate}.
+ * Stores metadata keys in snake case on every write, since a presigned upload sends them as header names that reach
+ * GCS lowercased and would otherwise lose the case of a key such as {@code expirationDate}.
  */
 final class MetadataUtils {
 
@@ -17,8 +18,11 @@ final class MetadataUtils {
     }
 
     static Map<String, String> toStoredMetadata(Map<String, String> metadata) {
-        Map<String, String> stored = new HashMap<>(metadata.size());
-        metadata.forEach((key, value) -> stored.put(UPPERCASE.matcher(key).replaceAll("_$1").toLowerCase(), value));
+        if (metadata == null) {
+            return null;
+        }
+        var stored = new HashMap<String, String>(metadata.size());
+        metadata.forEach((key, value) -> stored.put(UPPERCASE.matcher(key).replaceAll("_$1").toLowerCase(Locale.ROOT), value));
         return stored;
     }
 
@@ -26,8 +30,8 @@ final class MetadataUtils {
         if (metadata == null) {
             return null;
         }
-        Map<String, String> retrieved = new HashMap<>(metadata.size());
-        metadata.forEach((key, value) -> retrieved.put(WORD_SEPARATOR.matcher(key).replaceAll(match -> match.group(1).toUpperCase()), value));
+        var retrieved = new HashMap<String, String>(metadata.size());
+        metadata.forEach((key, value) -> retrieved.put(WORD_SEPARATOR.matcher(key).replaceAll(match -> match.group(1).toUpperCase(Locale.ROOT)), value));
         return retrieved;
     }
 }
