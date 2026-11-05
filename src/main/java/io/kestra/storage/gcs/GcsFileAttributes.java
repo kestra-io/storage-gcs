@@ -51,6 +51,6 @@ public class GcsFileAttributes implements FileAttributes {
 
     @Override
     public Map<String, String> getMetadata() {
-        return MetadataUtils.toRetrievedMetadata(blobInfo.getMetadata());
+        return blobInfo.getMetadata();
     }
 }

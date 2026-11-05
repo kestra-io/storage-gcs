@@ -14,6 +14,7 @@ import org.junit.jupiter.api.Test;
 import io.kestra.core.storage.StorageTestSuite;
 import io.kestra.core.storages.FileAttributes;
 import io.kestra.core.storages.PresignableStorage;
+import io.kestra.core.storages.PresignRequest;
 import io.kestra.core.storages.PresignedRequest;
 import io.kestra.core.utils.IdUtils;
 
@@ -32,7 +33,15 @@ class GcsStorageTest extends StorageTestSuite {
         var presignable = storageInterface.as(PresignableStorage.class).orElseThrow();
 
         try (HttpClient client = HttpClient.newHttpClient()) {
-            var put = presignable.presign(tenantId, null, uri, PresignedRequest.Method.PUT, Map.of("expirationDate", "2030-01-01T00:00:00Z"), Duration.ofMinutes(5)).orElseThrow();
+            var put = presignable.presign(
+                PresignRequest.builder()
+                    .tenantId(tenantId)
+                    .uri(uri)
+                    .method(PresignedRequest.Method.PUT)
+                    .metadata(Map.of("description", "presigned"))
+                    .ttl(Duration.ofMinutes(5))
+                    .build()
+            ).orElseThrow();
             var upload = HttpRequest.newBuilder(put.url()).PUT(HttpRequest.BodyPublishers.ofString("hello"));
             put.headers().forEach(upload::header);
             assertThat(client.send(upload.build(), HttpResponse.BodyHandlers.discarding()).statusCode(), is(200));
@@ -41,10 +50,12 @@ class GcsStorageTest extends StorageTestSuite {
             try (var content = stored.inputStream()) {
                 assertThat(new String(content.readAllBytes(), StandardCharsets.UTF_8), is("hello"));
             }
-            assertThat(stored.metadata(), hasEntry("expirationDate", "2030-01-01T00:00:00Z"));
+            assertThat(stored.metadata(), hasEntry("description", "presigned"));
             assertThat(storageInterface.getAttributes(tenantId, null, new URI(directory)).getType(), is(FileAttributes.FileType.Directory));
 
-            var get = presignable.presign(tenantId, null, uri, PresignedRequest.Method.GET, Map.of(), Duration.ofMinutes(5)).orElseThrow();
+            var get = presignable.presign(
+                PresignRequest.builder().tenantId(tenantId).uri(uri).method(PresignedRequest.Method.GET).ttl(Duration.ofMinutes(5)).build()
+            ).orElseThrow();
             var download = client.send(HttpRequest.newBuilder(get.url()).GET().build(), HttpResponse.BodyHandlers.ofString());
             assertThat(download.body(), is("hello"));
         }
