@@ -10,9 +10,11 @@ import java.nio.ByteBuffer;
 import java.nio.channels.Channels;
 import java.nio.channels.ReadableByteChannel;
 import java.nio.file.Path;
+import java.time.Duration;
 import java.time.Instant;
 import java.time.OffsetDateTime;
 import java.util.*;
+import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
@@ -20,12 +22,16 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import com.google.api.gax.paging.Page;
+import com.google.auth.ServiceAccountSigner;
 import com.google.cloud.WriteChannel;
 import com.google.cloud.storage.*;
 
 import io.kestra.core.models.annotations.Plugin;
 import io.kestra.core.models.annotations.PluginProperty;
 import io.kestra.core.storages.FileAttributes;
+import io.kestra.core.storages.PresignRequest;
+import io.kestra.core.storages.PresignableStorage;
+import io.kestra.core.storages.PresignedRequest;
 import io.kestra.core.storages.StorageInterface;
 import io.kestra.core.storages.StorageObject;
 
@@ -47,7 +53,7 @@ import static io.kestra.core.utils.Rethrow.throwFunction;
 @Getter
 @Plugin
 @Plugin.Id("gcs")
-public class GcsStorage implements StorageInterface, GcsConfig {
+public class GcsStorage implements StorageInterface, PresignableStorage, GcsConfig {
     private static final Logger log = LoggerFactory.getLogger(GcsStorage.class);
 
     // GCS batch requests are limited to 100 operations per submit call.
@@ -58,6 +64,10 @@ public class GcsStorage implements StorageInterface, GcsConfig {
     // batch with a short backoff to absorb those before failing.
     private static final int BATCH_SUBMIT_MAX_ATTEMPTS = 3;
     private static final long BATCH_SUBMIT_RETRY_BACKOFF_MS = 500;
+
+    private static final Duration MAX_SIGNED_URL_TTL = Duration.ofDays(7);
+    private static final String CANNOT_SIGN_MESSAGE = "The GCS credentials of bucket '%s' cannot sign URLs. Configure a service account key, or grant 'iam.serviceAccounts.signBlob' to the service account of the default credentials.";
+    private static final String METADATA_HEADER_PREFIX = "x-goog-meta-";
 
     private String bucket;
 
@@ -137,7 +147,7 @@ public class GcsStorage implements StorageInterface, GcsConfig {
             }
 
             ReadableByteChannel reader = blob.reader();
-            return new StorageObject(blob.getMetadata(), Channels.newInputStream(reader));
+            return new StorageObject(MetadataUtils.toRetrievedMetadata(blob.getMetadata()), Channels.newInputStream(reader));
         } catch (StorageException e) {
             throw new IOException(e);
         }
@@ -265,7 +275,7 @@ public class GcsStorage implements StorageInterface, GcsConfig {
         String path = getPath(tenantId, uri);
         BlobInfo blobInfo = BlobInfo
             .newBuilder(this.blob(tenantId, uri))
-            .setMetadata(storageObject.metadata())
+            .setMetadata(MetadataUtils.toStoredMetadata(storageObject.metadata()))
             .build();
         return put(uri, storageObject, path, blobInfo);
     }
@@ -275,7 +285,7 @@ public class GcsStorage implements StorageInterface, GcsConfig {
         String path = getPath(uri);
         BlobInfo blobInfo = BlobInfo
             .newBuilder(this.blob(uri))
-            .setMetadata(storageObject.metadata())
+            .setMetadata(MetadataUtils.toStoredMetadata(storageObject.metadata()))
             .build();
         return put(uri, storageObject, path, blobInfo);
     }
@@ -298,6 +308,36 @@ public class GcsStorage implements StorageInterface, GcsConfig {
 
             return createUri(uri.getPath());
         } catch (StorageException e) {
+            throw new IOException(e);
+        }
+    }
+
+    @Override
+    public Optional<PresignedRequest> presign(PresignRequest request) throws IOException {
+        var method = request.method();
+        var path = getPath(request.tenantId(), request.uri());
+        var headers = new HashMap<String, String>();
+        var options = new ArrayList<Storage.SignUrlOption>(
+            List.of(
+                Storage.SignUrlOption.withV4Signature(),
+                Storage.SignUrlOption.httpMethod(HttpMethod.valueOf(method.name()))
+            )
+        );
+        if (PresignedRequest.Method.PUT == method) {
+            mkdirs(path);
+            MetadataUtils.toStoredMetadata(request.metadata()).forEach((key, value) -> headers.put(METADATA_HEADER_PREFIX + key, value));
+            options.add(Storage.SignUrlOption.withExtHeaders(headers));
+        }
+
+        var ttlSeconds = Math.min(request.ttl().toSeconds(), MAX_SIGNED_URL_TTL.toSeconds());
+        try {
+            var url = this.storage.signUrl(BlobInfo.newBuilder(blob(path)).build(), ttlSeconds, TimeUnit.SECONDS, options.toArray(Storage.SignUrlOption[]::new));
+            return Optional.of(PresignedRequest.builder().method(method).url(url.toURI()).headers(headers).build());
+        } catch (IllegalStateException e) {
+            throw new IllegalStateException(CANNOT_SIGN_MESSAGE.formatted(bucket), e);
+        } catch (ServiceAccountSigner.SigningException e) {
+            throw new IOException(CANNOT_SIGN_MESSAGE.formatted(bucket), e);
+        } catch (StorageException | URISyntaxException e) {
             throw new IOException(e);
         }
     }

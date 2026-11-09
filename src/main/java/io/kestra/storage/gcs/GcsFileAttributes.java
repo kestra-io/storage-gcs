@@ -38,7 +38,7 @@ public class GcsFileAttributes implements FileAttributes {
 
     @Override
     public FileType getType() {
-        if (isDirectory || fileName.endsWith("/") || blobInfo.getContentType().equals("application/x-directory")) {
+        if (isDirectory || fileName.endsWith("/") || "application/x-directory".equals(blobInfo.getContentType())) {
             return FileType.Directory;
         }
         return FileType.File;
@@ -51,6 +51,6 @@ public class GcsFileAttributes implements FileAttributes {
 
     @Override
     public Map<String, String> getMetadata() {
-        return blobInfo.getMetadata();
+        return MetadataUtils.toRetrievedMetadata(blobInfo.getMetadata());
     }
 }
